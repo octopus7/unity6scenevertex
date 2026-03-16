@@ -1,0 +1,85 @@
+{
+  "canvasWidth": 1024,
+  "canvasHeight": 512,
+  "elements": [
+    {
+      "id": "water",
+      "layer": "ground",
+      "shape": "blob",
+      "baseRadius": 84.0,
+      "variants": ["#567E82", "#4A6F76", "#6A9090"]
+    },
+    {
+      "id": "pebble",
+      "layer": "ground",
+      "shape": "blob",
+      "baseRadius": 42.0,
+      "variants": ["#8A8F95", "#979DA4", "#7D848C"]
+    },
+    {
+      "id": "sand",
+      "layer": "ground",
+      "shape": "blob",
+      "baseRadius": 56.0,
+      "variants": ["#C7B28C", "#D4C09C", "#BFA57B"]
+    },
+    {
+      "id": "soil",
+      "layer": "ground",
+      "shape": "blob",
+      "baseRadius": 58.0,
+      "variants": ["#6A4B33", "#745540", "#5F412B"]
+    },
+    {
+      "id": "grass",
+      "layer": "ground",
+      "shape": "blob",
+      "baseRadius": 96.0,
+      "variants": ["#6E8353", "#7F9160", "#5E7248"]
+    },
+    {
+      "id": "road",
+      "layer": "road",
+      "shape": "segment",
+      "segmentLength": 78.0,
+      "segmentThickness": 24.0,
+      "variants": ["#7D684D", "#8A7357", "#6E5A42"]
+    },
+    {
+      "id": "tree",
+      "layer": "prop",
+      "shape": "tree",
+      "baseRadius": 26.0,
+      "variants": ["#5A7146", "#6C8453", "#4C633A"]
+    },
+    {
+      "id": "rock",
+      "layer": "prop",
+      "shape": "rock",
+      "baseRadius": 18.0,
+      "variants": ["#7A7D80", "#8A8E92", "#696D71"]
+    },
+    {
+      "id": "bush",
+      "layer": "prop",
+      "shape": "bush",
+      "baseRadius": 20.0,
+      "variants": ["#627849", "#708A54", "#597043"]
+    },
+    {
+      "id": "mushroom",
+      "layer": "prop",
+      "shape": "mushroom",
+      "baseRadius": 7.0,
+      "variants": ["#B05C47", "#C66A52", "#D97B62"]
+    },
+    {
+      "id": "fence",
+      "layer": "fence",
+      "shape": "fence",
+      "segmentLength": 34.0,
+      "segmentThickness": 8.0,
+      "variants": ["#7A6246", "#8A7154", "#6B543C"]
+    }
+  ]
+}
