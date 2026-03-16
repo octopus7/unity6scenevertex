@@ -1,0 +1,9 @@
+pub const BITMAP_SIZE: usize = 1024;
+pub const BITMAP_PIXELS: usize = BITMAP_SIZE * BITMAP_SIZE;
+pub const MIN_BRUSH_RADIUS: f32 = 4.0;
+pub const MAX_BRUSH_RADIUS: f32 = 160.0;
+pub const SEA_LEVEL: f32 = 0.42;
+pub const STANDARD_STRENGTH_SCALE: f32 = 0.08;
+pub const AUTOSAVE_HEIGHTMAP_FILE: &str = "generated/heightmap_latest.png";
+pub const MIN_CONTOUR_STEP: f32 = 0.01;
+pub const MAX_CONTOUR_STEP: f32 = 0.25;
