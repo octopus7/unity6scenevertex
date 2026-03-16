@@ -221,6 +221,28 @@ select {
   justify-content: space-between;
   align-items: flex-end;
   margin-bottom: 16px;
+  gap: 16px;
+}
+
+.language-picker {
+  display: grid;
+  gap: 6px;
+  justify-items: end;
+}
+
+.language-picker label {
+  font-size: 12px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+
+.language-picker select {
+  min-width: 132px;
+  border-radius: 12px;
+  border: 1px solid rgba(92, 70, 34, 0.18);
+  background: rgba(255, 250, 241, 0.96);
+  padding: 8px 10px;
 }
 
 .canvas-shell {
@@ -265,5 +287,14 @@ select {
 
   .summary-grid {
     grid-template-columns: 1fr;
+  }
+
+  .preview-head {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .language-picker {
+    justify-items: stretch;
   }
 }

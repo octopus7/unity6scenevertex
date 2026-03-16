@@ -116,23 +116,23 @@
 
       ctx.lineCap = "round";
       ctx.lineJoin = "round";
-      ctx.strokeStyle = "rgba(0,0,0," + (segment.opacity * (0.04 + bundle.state.shadowStrength * 0.05)).toFixed(3) + ")";
-      ctx.lineWidth = thickness * 1.08;
+      ctx.strokeStyle = "rgba(0,0,0," + (segment.opacity * (0.03 + bundle.state.shadowStrength * 0.035)).toFixed(3) + ")";
+      ctx.lineWidth = thickness * 1.02;
       ctx.beginPath();
       ctx.moveTo(segment.x - dx + 3.5, segment.y - dy + 4.5);
       ctx.lineTo(segment.x + dx + 3.5, segment.y + dy + 4.5);
       ctx.stroke();
 
       ctx.strokeStyle = roadColor;
-      ctx.globalAlpha = segment.opacity * 0.68;
-      ctx.lineWidth = thickness;
+      ctx.globalAlpha = segment.opacity * 0.45;
+      ctx.lineWidth = thickness * 0.92;
       ctx.beginPath();
       ctx.moveTo(segment.x - dx, segment.y - dy);
       ctx.lineTo(segment.x + dx, segment.y + dy);
       ctx.stroke();
 
-      ctx.strokeStyle = "rgba(255,255,255," + (segment.opacity * 0.12).toFixed(3) + ")";
-      ctx.lineWidth = thickness * 0.34;
+      ctx.strokeStyle = "rgba(255,255,255," + (segment.opacity * 0.06).toFixed(3) + ")";
+      ctx.lineWidth = thickness * 0.22;
       ctx.beginPath();
       ctx.moveTo(segment.x - dx - 1.5, segment.y - dy - 1.5);
       ctx.lineTo(segment.x + dx - 1.5, segment.y + dy - 1.5);

@@ -34,6 +34,10 @@
     return (value >>> 0) / 4294967295;
   }
 
+  function signedHash(seed, x, y) {
+    return hash2D(seed, x, y) * 2 - 1;
+  }
+
   function chaikin(points, iterations) {
     let current = points.slice();
     for (let step = 0; step < iterations; step += 1) {
@@ -86,6 +90,140 @@
     }
 
     return result;
+  }
+
+  function normalizeAngle(angle) {
+    while (angle > Math.PI) {
+      angle -= Math.PI * 2;
+    }
+    while (angle < -Math.PI) {
+      angle += Math.PI * 2;
+    }
+    return angle;
+  }
+
+  function organicWarp(points, terrain, seed, amount) {
+    if (points.length < 3 || amount <= 0.01) {
+      return points.slice();
+    }
+
+    const warped = [points[0]];
+    for (let index = 1; index < points.length - 1; index += 1) {
+      const prev = points[index - 1];
+      const current = points[index];
+      const next = points[index + 1];
+      const tangentX = next.x - prev.x;
+      const tangentY = next.y - prev.y;
+      const tangentLength = Math.hypot(tangentX, tangentY) || 1;
+      const normalX = -tangentY / tangentLength;
+      const normalY = tangentX / tangentLength;
+      const coarse = signedHash(seed ^ 0x51d7a3, Math.round(current.x * 0.045), Math.round(current.y * 0.045));
+      const medium = signedHash(seed ^ 0x8f2c4b, Math.round(current.x * 0.11), Math.round(current.y * 0.11));
+      const driftNoise = signedHash(seed ^ 0x7139, Math.round(current.x * 0.09), Math.round(current.y * 0.09));
+      const edgeDistance = Math.min(current.x, Params.CANVAS_WIDTH - current.x, current.y, Params.CANVAS_HEIGHT - current.y);
+      const edgeFactor = clamp(edgeDistance / 78, 0.22, 1);
+      const height = Heightmap.sampleHeight(terrain, current.x, current.y);
+      const clearance = clamp((height - terrain.waterLevel - terrain.wetBand * 0.18) / Math.max(terrain.dryBand, 0.001), 0.2, 1);
+      const amplitude = amount * edgeFactor * clearance * (0.58 + Math.abs(coarse) * 0.42);
+      const offset = (coarse * 0.72 + medium * 0.28) * amplitude;
+      const drift = driftNoise * amplitude * 0.2;
+      let scale = 1;
+      let candidate = current;
+
+      while (scale >= 0.2) {
+        const test = {
+          x: clamp(current.x + normalX * offset * scale + (tangentX / tangentLength) * drift * scale, 4, Params.CANVAS_WIDTH - 4),
+          y: clamp(current.y + normalY * offset * scale + (tangentY / tangentLength) * drift * scale, 4, Params.CANVAS_HEIGHT - 4)
+        };
+        if (Heightmap.sampleHeight(terrain, test.x, test.y) > terrain.waterLevel + terrain.wetBand * 0.08) {
+          candidate = test;
+          break;
+        }
+        scale *= 0.58;
+      }
+
+      warped.push(candidate);
+    }
+
+    warped.push(points[points.length - 1]);
+    return chaikin(warped, 1);
+  }
+
+  function analyzePolyline(polyline) {
+    if (polyline.length < 2) {
+      return {
+        totalLength: 0,
+        straightDistance: 0,
+        sinuosity: 1,
+        axisRatio: 1,
+        edgeRatio: 1,
+        turnDensity: 0,
+        sharpTurnPenalty: 0,
+        organicity: -Infinity
+      };
+    }
+
+    let totalLength = 0;
+    let edgeLength = 0;
+    let axisLength = 0;
+    let turnAmount = 0;
+    let sharpTurnAmount = 0;
+    let previousAngle = null;
+
+    for (let index = 1; index < polyline.length; index += 1) {
+      const start = polyline[index - 1];
+      const end = polyline[index];
+      const dx = end.x - start.x;
+      const dy = end.y - start.y;
+      const segmentLength = Math.hypot(dx, dy);
+      if (segmentLength < 0.001) {
+        continue;
+      }
+
+      totalLength += segmentLength;
+      const angle = Math.atan2(dy, dx);
+      const alignment = Math.max(Math.abs(dx), Math.abs(dy)) / segmentLength;
+      if (alignment > 0.97) {
+        axisLength += segmentLength * clamp((alignment - 0.97) / 0.03, 0, 1);
+      }
+
+      if (previousAngle !== null) {
+        const delta = Math.abs(normalizeAngle(angle - previousAngle));
+        turnAmount += delta;
+        if (delta > 0.95) {
+          sharpTurnAmount += delta - 0.95;
+        }
+      }
+      previousAngle = angle;
+
+      const mid = {
+        x: (start.x + end.x) * 0.5,
+        y: (start.y + end.y) * 0.5
+      };
+      const edgeDistance = Math.min(mid.x, Params.CANVAS_WIDTH - mid.x, mid.y, Params.CANVAS_HEIGHT - mid.y);
+      if (edgeDistance < 58) {
+        edgeLength += segmentLength * clamp((58 - edgeDistance) / 58, 0, 1);
+      }
+    }
+
+    const straightDistance = distance(polyline[0], polyline[polyline.length - 1]);
+    const sinuosity = totalLength / Math.max(straightDistance, 1);
+    const axisRatio = axisLength / Math.max(totalLength, 1);
+    const edgeRatio = edgeLength / Math.max(totalLength, 1);
+    const turnDensity = turnAmount / Math.max(totalLength / 120, 1);
+    const sharpTurnPenalty = sharpTurnAmount * 18;
+    const organicity = sinuosity * 18 + turnDensity * 8 - edgeRatio * 38 - axisRatio * 32 - sharpTurnPenalty;
+
+    return {
+      totalLength: totalLength,
+      straightDistance: straightDistance,
+      sinuosity: sinuosity,
+      axisRatio: axisRatio,
+      edgeRatio: edgeRatio,
+      turnDensity: turnDensity,
+      sharpTurnPenalty: sharpTurnPenalty,
+      organicity: organicity
+    };
   }
 
   function terrainToScene(terrain) {
@@ -148,19 +286,20 @@
       candidates.push({
         cell: { x: x, y: y },
         point: point,
+        kind: "edge",
         side: side,
         score: score
       });
     }
 
-    for (let x = 4; x < terrain.width - 4; x += 2) {
-      maybePush(x, 3, "north");
-      maybePush(x, terrain.height - 4, "south");
+    for (let x = 6; x < terrain.width - 6; x += 2) {
+      maybePush(x, 6, "north");
+      maybePush(x, terrain.height - 7, "south");
     }
 
-    for (let y = 4; y < terrain.height - 4; y += 2) {
-      maybePush(3, y, "west");
-      maybePush(terrain.width - 4, y, "east");
+    for (let y = 6; y < terrain.height - 6; y += 2) {
+      maybePush(6, y, "west");
+      maybePush(terrain.width - 7, y, "east");
     }
 
     return candidates;
@@ -187,6 +326,7 @@
         candidates.push({
           cell: shoreCell,
           point: point,
+          kind: "shore",
           bodyIndex: bodyIndex,
           score: score
         });
@@ -211,6 +351,7 @@
         candidates.push({
           cell: { x: x, y: y },
           point: point,
+          kind: "meadow",
           score: score
         });
       }
@@ -260,23 +401,33 @@
 
   function chooseViaPoint(start, end, candidates, terrain, rng, shoreSeeking) {
     const direct = distance(start.point, end.point);
-    if (direct < 180 || !candidates.length || rng() > 0.72) {
+    const wantsShore = shoreSeeking > 0.05;
+    if (direct < (wantsShore ? 110 : 135) || !candidates.length || rng() > 0.82) {
       return null;
     }
 
     let best = null;
-    let bestScore = 26;
+    let bestScore = 18;
 
     candidates.forEach(function (candidate) {
-      const detour = distance(start.point, candidate.point) + distance(candidate.point, end.point) - direct;
-      if (detour > 220) {
+      const startDistance = distance(start.point, candidate.point);
+      const endDistance = distance(candidate.point, end.point);
+      const detour = startDistance + endDistance - direct;
+      if (startDistance < 44 || endDistance < 44 || detour > Math.max(260, direct * 0.8)) {
         return;
       }
       const bend = pointLineDistance(candidate.point, start.point, end.point);
+      const midpointBias = 1 - Math.abs(startDistance / Math.max(direct, 1) - 0.5) * 2;
       const height = Heightmap.sampleHeight(terrain, candidate.point.x, candidate.point.y);
+      const slope = Heightmap.sampleSlope(terrain, candidate.point.x, candidate.point.y);
       const shoreHeight = terrain.waterLevel + terrain.wetBand + terrain.dryBand * 0.6;
-      const shorelineAffinity = shoreSeeking ? (1 - Math.abs(height - shoreHeight) * 10) * 18 : 0;
-      const score = bend - detour * 0.38 + shorelineAffinity;
+      const shorelineAffinity = wantsShore ? clamp(1 - Math.abs(height - shoreHeight) * 8, -0.4, 1) * 20 : 0;
+      const kindAffinity = candidate.kind === "shore"
+        ? 9 * shoreSeeking
+        : candidate.kind === "meadow"
+          ? 7 * (1 - Math.min(shoreSeeking, 0.7))
+          : 0;
+      const score = bend * 0.82 + midpointBias * 18 - detour * 0.26 - slope * 420 + shorelineAffinity + kindAffinity;
       if (score > bestScore) {
         bestScore = score;
         best = candidate;
@@ -284,6 +435,41 @@
     });
 
     return best;
+  }
+
+  function chooseViaChain(start, end, candidates, terrain, rng, shoreSeeking) {
+    const chain = [];
+    const first = chooseViaPoint(start, end, candidates, terrain, rng, shoreSeeking);
+    if (!first) {
+      return chain;
+    }
+
+    chain.push(first);
+    if (distance(start.point, end.point) < 320 || rng() > 0.32) {
+      return chain;
+    }
+
+    const remaining = candidates.filter(function (candidate) {
+      return candidate !== first;
+    });
+    const startToFirst = distance(start.point, first.point);
+    const firstToEnd = distance(first.point, end.point);
+    const insertBefore = startToFirst > firstToEnd;
+    const second = insertBefore
+      ? chooseViaPoint(start, first, remaining, terrain, rng, shoreSeeking * 0.8)
+      : chooseViaPoint(first, end, remaining, terrain, rng, shoreSeeking * 0.8);
+
+    if (!second) {
+      return chain;
+    }
+
+    if (insertBefore) {
+      chain.unshift(second);
+    } else {
+      chain.push(second);
+    }
+
+    return chain;
   }
 
   function routePath(terrain, start, end, options) {
@@ -359,7 +545,8 @@
         const slopePenalty = Math.abs(nextHeight - currentHeight) * 56;
         const wetPenalty = nextHeight <= terrain.waterLevel + terrain.wetBand ? 10 : 0;
         const edgeDistance = Math.min(nextX, width - 1 - nextX, nextY, height - 1 - nextY);
-        const edgePenalty = edgeDistance < 4 ? (4 - edgeDistance) * options.edgePenalty : 0;
+        const edgeBuffer = options.edgeBuffer || 6;
+        const edgePenalty = edgeDistance < edgeBuffer ? (edgeBuffer - edgeDistance) * options.edgePenalty : 0;
         const trafficBoost = 1 + Math.min(terrain.traffic[nextIndex], 3.5) * 0.24 * options.trafficAttraction;
         const shoreTargetHeight = terrain.waterLevel + terrain.wetBand + terrain.dryBand * 0.58;
         const shorelinePenalty = Math.abs(nextHeight - shoreTargetHeight) * 18 * options.shoreSeeking;
@@ -395,9 +582,59 @@
     return resamplePolyline(chaikin(worldPoints, 2), 8.5);
   }
 
+  function createOrganicRoute(kind, terrain, start, end, viaPool, options, rng) {
+    let best = null;
+    const attempts = options.attempts || 4;
+
+    for (let attempt = 0; attempt < attempts; attempt += 1) {
+      const routeSeed = Math.floor(rng() * 100000);
+      const via = chooseViaChain(start, end, viaPool || [], terrain, rng, options.shoreSeeking);
+      const basePolyline = buildRoute(terrain, start, end, via, {
+        noiseSeed: routeSeed,
+        trafficAttraction: options.trafficAttraction,
+        shoreSeeking: options.shoreSeeking,
+        edgePenalty: options.edgePenalty,
+        edgeBuffer: options.edgeBuffer,
+        wander: options.wander
+      });
+      if (!basePolyline || basePolyline.length < 3) {
+        continue;
+      }
+
+      const polyline = resamplePolyline(
+        organicWarp(
+          basePolyline,
+          terrain,
+          routeSeed ^ ((attempt + 1) * 0x45d9f3b),
+          options.warpAmount * lerp(0.84, 1.14, rng())
+        ),
+        7.25
+      );
+      const analysis = analyzePolyline(polyline);
+      const detourPenalty = kind === "connector" && analysis.totalLength > analysis.straightDistance * 2.45 ? 18 : 0;
+      const score = analysis.organicity + via.length * 2.6 + options.shoreSeeking * 2.4 - detourPenalty;
+
+      if (!best || score > best.score) {
+        best = {
+          polyline: polyline,
+          routeSeed: routeSeed,
+          score: score,
+          analysis: analysis
+        };
+      }
+
+      if (analysis.edgeRatio < 0.12 && analysis.axisRatio < 0.12 && analysis.sinuosity > 1.08) {
+        break;
+      }
+    }
+
+    return best;
+  }
+
   function buildRoute(terrain, start, end, via, options) {
     const legs = [];
-    const points = [start].concat(via ? [via] : [], [end]);
+    const viaPoints = Array.isArray(via) ? via : via ? [via] : [];
+    const points = [start].concat(viaPoints, [end]);
     for (let index = 0; index < points.length - 1; index += 1) {
       const cells = routePath(terrain, points[index].cell, points[index + 1].cell, options);
       if (!cells.length) {
@@ -452,30 +689,26 @@
     const entryCount = clamp(Math.round(state.pathNetworkCount), 2, 5);
     const connectorCount = clamp(Math.round(state.pathConnectorCount), 1, 5);
     const entries = selectDiverseCandidates(edgeCandidates, entryCount + 1, 110, rng);
-    const shores = selectDiverseCandidates(shoreCandidates, Math.min(5, 2 + Math.round(state.pondSize * 2)), 90, rng);
-    const meadows = selectDiverseCandidates(meadowCandidates, 6, 110, rng);
+    const shores = selectDiverseCandidates(shoreCandidates, Math.min(8, 3 + Math.round(state.pondSize * 3)), 84, rng);
+    const meadows = selectDiverseCandidates(meadowCandidates, 7, 102, rng);
     const routes = [];
     const mainRoutes = [];
     const connectorRoutes = [];
 
     function pushRoute(kind, start, end, options, viaPool) {
-      const via = chooseViaPoint(start, end, viaPool || [], terrain, rng, options.shoreSeeking > 0);
-      const routeSeed = Math.floor(rng() * 100000);
-      const polyline = buildRoute(terrain, start, end, via, {
-        noiseSeed: routeSeed,
-        trafficAttraction: options.trafficAttraction,
-        shoreSeeking: options.shoreSeeking,
-        edgePenalty: options.edgePenalty,
-        wander: options.wander
-      });
-      if (!polyline || polyline.length < 3) {
+      if (!start || !end || start === end) {
+        return;
+      }
+
+      const organicRoute = createOrganicRoute(kind, terrain, start, end, viaPool || [], options, rng);
+      if (!organicRoute || !organicRoute.polyline || organicRoute.polyline.length < 3) {
         return;
       }
 
       const route = {
         kind: kind,
-        seed: routeSeed,
-        polyline: polyline,
+        seed: organicRoute.routeSeed,
+        polyline: organicRoute.polyline,
         width: options.width,
         opacity: options.opacity,
         trafficRadius: options.trafficRadius,
@@ -483,7 +716,7 @@
         erodeRadius: options.erodeRadius,
         erodeDepth: options.erodeDepth
       };
-      applyRouteImpact(terrain, polyline, route);
+      applyRouteImpact(terrain, organicRoute.polyline, route);
       routes.push(route);
       if (kind === "main") {
         mainRoutes.push(route);
@@ -507,8 +740,11 @@
         erodeDepth: 0.012 * state.soilAmount,
         trafficAttraction: 0.8,
         shoreSeeking: shoreTarget ? 0.2 : 0,
-        edgePenalty: 1.8,
-        wander: 0.55
+        edgePenalty: 2.3,
+        edgeBuffer: 7,
+        wander: 0.58,
+        warpAmount: 8.5,
+        attempts: 4
       }, meadows);
 
       if (meadowTarget && meadowTarget !== primaryTarget && rng() < 0.72) {
@@ -521,8 +757,11 @@
           erodeDepth: 0.009 * state.soilAmount,
           trafficAttraction: 1,
           shoreSeeking: 0,
-          edgePenalty: 1.6,
-          wander: 0.72
+          edgePenalty: 2,
+          edgeBuffer: 7,
+          wander: 0.76,
+          warpAmount: 11,
+          attempts: 4
         }, shores);
       }
     });
@@ -530,10 +769,22 @@
     for (let index = 0; index < connectorCount; index += 1) {
       const shoreStart = shores.length ? shores[index % shores.length] : null;
       const meadowStart = meadows.length ? meadows[index % meadows.length] : null;
-      const start = shoreStart && rng() < 0.58 ? shoreStart : meadowStart || entries[index % entries.length];
-      const end = shoreStart && meadows.length
-        ? meadows[(index + 2) % meadows.length]
-        : entries[(index + 1) % entries.length];
+      const shoreSibling = shoreStart && shores.length > 1
+        ? nearestCandidate(shoreStart, shores, function (candidate) {
+          return candidate !== shoreStart && candidate.bodyIndex === shoreStart.bodyIndex;
+        }) || nearestCandidate(shoreStart, shores, function (candidate) {
+          return candidate !== shoreStart;
+        })
+        : null;
+      const meadowSibling = meadowStart && meadows.length > 1
+        ? nearestCandidate(meadowStart, meadows, function (candidate) {
+          return candidate !== meadowStart;
+        })
+        : null;
+      const start = shoreStart && (rng() < 0.72 || !meadowStart) ? shoreStart : meadowStart || entries[index % entries.length];
+      const end = shoreSibling || meadowSibling || nearestCandidate(start, meadows, function (candidate) {
+        return candidate !== start;
+      }) || entries[(index + 1) % entries.length];
       pushRoute("connector", start, end, {
         width: lerp(0.64, 0.86, rng()),
         opacity: lerp(0.42, 0.64, rng()),
@@ -542,14 +793,20 @@
         erodeRadius: 12,
         erodeDepth: 0.006 * state.soilAmount,
         trafficAttraction: 1.15,
-        shoreSeeking: shoreStart ? 0.18 : 0,
-        edgePenalty: 1.1,
-        wander: 0.88
+        shoreSeeking: shoreStart ? 0.26 : 0.08,
+        edgePenalty: 1.6,
+        edgeBuffer: 8,
+        wander: 0.96,
+        warpAmount: 13,
+        attempts: 5
       }, meadows.concat(shores));
     }
 
-    if (state.pathLoopChance > 0.2 && entries.length >= 2 && shores.length) {
-      pushRoute("connector", shores[0], entries[entries.length - 1], {
+    if (state.pathLoopChance > 0.2 && shores.length >= 2) {
+      const loopTarget = nearestCandidate(shores[0], shores, function (candidate) {
+        return candidate !== shores[0];
+      });
+      pushRoute("connector", shores[0], loopTarget, {
         width: 0.7,
         opacity: 0.52,
         trafficRadius: 16,
@@ -557,9 +814,12 @@
         erodeRadius: 12,
         erodeDepth: 0.005 * state.soilAmount,
         trafficAttraction: 1.22,
-        shoreSeeking: 0.16,
-        edgePenalty: 0.8,
-        wander: 0.94
+        shoreSeeking: 0.34,
+        edgePenalty: 1.4,
+        edgeBuffer: 8,
+        wander: 1.02,
+        warpAmount: 15,
+        attempts: 5
       }, meadows);
     }
 
