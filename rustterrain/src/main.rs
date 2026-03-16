@@ -1,17 +1,24 @@
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
-use std::time::{SystemTime, UNIX_EPOCH};
+use std::{
+    fs,
+    path::PathBuf,
+    time::{SystemTime, UNIX_EPOCH},
+};
 
 use eframe::egui::{
     self, Align, CentralPanel, Color32, ColorImage, Context, Direction, Layout, PointerButton,
     Pos2, Rect, Sense, TextureHandle, TextureOptions, TopBottomPanel, Vec2, ViewportBuilder,
 };
+use image::{ColorType, ImageFormat};
 use noise::{NoiseFn, OpenSimplex, Perlin};
 
 const BITMAP_SIZE: usize = 1024;
 const BITMAP_PIXELS: usize = BITMAP_SIZE * BITMAP_SIZE;
 const MIN_BRUSH_RADIUS: f32 = 4.0;
 const MAX_BRUSH_RADIUS: f32 = 160.0;
+const SEA_LEVEL: f32 = 0.42;
+const HEIGHTMAP_FILE: &str = "generated/heightmap_latest.png";
 
 fn main() -> eframe::Result<()> {
     let options = eframe::NativeOptions {
@@ -31,7 +38,7 @@ fn main() -> eframe::Result<()> {
 }
 
 struct TerrainApp {
-    bitmap: Vec<u8>,
+    heightmap: Vec<f32>,
     texture: Option<TextureHandle>,
     texture_dirty: bool,
     brush_radius: f32,
@@ -40,39 +47,42 @@ struct TerrainApp {
     last_drag_pos: Option<Pos2>,
     hover_pixel: Option<(usize, usize)>,
     seed: u32,
+    save_status: String,
+    pending_save: bool,
 }
 
 impl TerrainApp {
     fn new(cc: &eframe::CreationContext<'_>) -> Self {
-        let seed = SystemTime::now()
-            .duration_since(UNIX_EPOCH)
-            .map(|duration| duration.as_secs() as u32)
-            .unwrap_or(1);
-
         let mut app = Self {
-            bitmap: generate_cloud_bitmap(seed),
+            heightmap: vec![0.0; BITMAP_PIXELS],
             texture: None,
             texture_dirty: true,
             brush_radius: 28.0,
-            brush_strength: 0.18,
+            brush_strength: 0.028,
             selected_tool: 0,
             last_drag_pos: None,
             hover_pixel: None,
-            seed,
+            seed: 0,
+            save_status: String::new(),
+            pending_save: false,
         };
+        app.regenerate_terrain();
         app.ensure_texture(&cc.egui_ctx);
         app
     }
 
     fn ensure_texture(&mut self, ctx: &Context) {
+        if self.texture.is_some() && !self.texture_dirty {
+            return;
+        }
+
         let image = self.build_color_image();
         match &mut self.texture {
             Some(texture) if self.texture_dirty => {
                 texture.set(image, TextureOptions::LINEAR);
             }
             None => {
-                self.texture =
-                    Some(ctx.load_texture("cloud_bitmap", image, TextureOptions::LINEAR));
+                self.texture = Some(ctx.load_texture("terrain_map", image, TextureOptions::LINEAR));
             }
             _ => {}
         }
@@ -81,14 +91,36 @@ impl TerrainApp {
 
     fn build_color_image(&self) -> ColorImage {
         let mut rgba = Vec::with_capacity(BITMAP_PIXELS * 4);
-        for &value in &self.bitmap {
-            let t = value as f32 / 255.0;
-            let tint = t.powf(0.9);
-            rgba.push(lerp(10.0, 244.0, tint) as u8);
-            rgba.push(lerp(18.0, 247.0, tint.powf(0.92)) as u8);
-            rgba.push(lerp(34.0, 255.0, tint.powf(0.84)) as u8);
-            rgba.push(255);
+
+        for y in 0..BITMAP_SIZE {
+            let y_up = y.saturating_sub(1);
+            let y_down = (y + 1).min(BITMAP_SIZE - 1);
+
+            for x in 0..BITMAP_SIZE {
+                let x_left = x.saturating_sub(1);
+                let x_right = (x + 1).min(BITMAP_SIZE - 1);
+                let height = self.heightmap[y * BITMAP_SIZE + x];
+                let left = self.heightmap[y * BITMAP_SIZE + x_left];
+                let right = self.heightmap[y * BITMAP_SIZE + x_right];
+                let up = self.heightmap[y_up * BITMAP_SIZE + x];
+                let down = self.heightmap[y_down * BITMAP_SIZE + x];
+
+                let dx = right - left;
+                let dy = down - up;
+                let hillshade = if height < SEA_LEVEL {
+                    (0.86 + (-dx * 0.22) + (-dy * 0.14)).clamp(0.72, 1.04)
+                } else {
+                    (0.88 + (-dx * 1.85) + (-dy * 1.25)).clamp(0.56, 1.18)
+                };
+
+                let [r, g, b] = terrain_color(height);
+                rgba.push((r as f32 * hillshade).clamp(0.0, 255.0) as u8);
+                rgba.push((g as f32 * hillshade).clamp(0.0, 255.0) as u8);
+                rgba.push((b as f32 * hillshade).clamp(0.0, 255.0) as u8);
+                rgba.push(255);
+            }
         }
+
         ColorImage::from_rgba_unmultiplied([BITMAP_SIZE, BITMAP_SIZE], &rgba)
     }
 
@@ -125,6 +157,8 @@ impl TerrainApp {
     }
 
     fn handle_canvas_input(&mut self, ctx: &Context, response: &egui::Response, rect: Rect) {
+        let was_dragging = self.last_drag_pos.is_some();
+
         if response.hovered() {
             let scroll_delta = ctx.input(|input| input.raw_scroll_delta.y);
             if scroll_delta.abs() > f32::EPSILON {
@@ -165,6 +199,9 @@ impl TerrainApp {
         }
 
         if !primary_active && !secondary_active {
+            if was_dragging && self.pending_save {
+                self.save_heightmap_to_disk();
+            }
             self.last_drag_pos = None;
         }
     }
@@ -200,13 +237,55 @@ impl TerrainApp {
 
                 let falloff = 1.0 - (distance_sq / radius_sq);
                 let idx = y as usize * BITMAP_SIZE + x as usize;
-                let current = self.bitmap[idx] as f32 / 255.0;
+                let current = self.heightmap[idx];
                 let updated = (current + amount * falloff).clamp(0.0, 1.0);
-                self.bitmap[idx] = (updated * 255.0).round() as u8;
+                self.heightmap[idx] = updated;
             }
         }
 
         self.texture_dirty = true;
+        self.pending_save = true;
+    }
+
+    fn regenerate_terrain(&mut self) {
+        self.seed = next_seed();
+        self.heightmap = generate_heightmap(self.seed);
+        self.texture_dirty = true;
+        self.pending_save = true;
+        self.last_drag_pos = None;
+        self.save_heightmap_to_disk();
+    }
+
+    fn save_heightmap_to_disk(&mut self) {
+        let path = PathBuf::from(HEIGHTMAP_FILE);
+        if let Some(parent) = path.parent() {
+            if let Err(error) = fs::create_dir_all(parent) {
+                self.save_status = format!("Save failed: {error}");
+                return;
+            }
+        }
+
+        let mut grayscale = Vec::with_capacity(BITMAP_PIXELS);
+        for &height in &self.heightmap {
+            grayscale.push((height.clamp(0.0, 1.0) * 255.0).round() as u8);
+        }
+
+        match image::save_buffer_with_format(
+            &path,
+            &grayscale,
+            BITMAP_SIZE as u32,
+            BITMAP_SIZE as u32,
+            ColorType::L8,
+            ImageFormat::Png,
+        ) {
+            Ok(()) => {
+                self.save_status = format!("Saved {}", path.display());
+                self.pending_save = false;
+            }
+            Err(error) => {
+                self.save_status = format!("Save failed: {error}");
+            }
+        }
     }
 }
 
@@ -214,9 +293,9 @@ impl eframe::App for TerrainApp {
     fn update(&mut self, ctx: &Context, _frame: &mut eframe::Frame) {
         TopBottomPanel::top("toolbar_info").show(ctx, |ui| {
             ui.horizontal(|ui| {
-                ui.label("Left drag: add clouds");
+                ui.label("Left drag: raise terrain");
                 ui.separator();
-                ui.label("Right drag: remove clouds");
+                ui.label("Right drag: lower terrain");
                 ui.separator();
                 ui.label("Wheel: brush size");
                 ui.separator();
@@ -224,8 +303,12 @@ impl eframe::App for TerrainApp {
                 if let Some((x, y)) = self.hover_pixel {
                     let idx = y * BITMAP_SIZE + x;
                     ui.separator();
-                    ui.label(format!("Pixel ({x}, {y}) = {}", self.bitmap[idx]));
+                    ui.label(format!("Height ({x}, {y}) = {:.3}", self.heightmap[idx]));
                 }
+                ui.separator();
+                ui.label(format!("Sea {:.2}", SEA_LEVEL));
+                ui.separator();
+                ui.label(&self.save_status);
                 ui.with_layout(Layout::right_to_left(Align::Center), |ui| {
                     ui.label(format!("Seed {}", self.seed));
                 });
@@ -237,7 +320,11 @@ impl eframe::App for TerrainApp {
             .min_height(68.0)
             .show(ctx, |ui| {
                 ui.horizontal_wrapped(|ui| {
-                    for tool_idx in 0..10 {
+                    if ui.button("Regenerate").clicked() {
+                        self.regenerate_terrain();
+                    }
+
+                    for tool_idx in 1..10 {
                         let label = format!("Tool {:02}", tool_idx + 1);
                         let selected = self.selected_tool == tool_idx;
                         if ui.selectable_label(selected, label).clicked() {
@@ -253,42 +340,54 @@ impl eframe::App for TerrainApp {
     }
 }
 
-fn generate_cloud_bitmap(seed: u32) -> Vec<u8> {
-    let base = Perlin::new(seed);
-    let detail = Perlin::new(seed ^ 0xA53A_9E5D);
-    let warp = OpenSimplex::new(seed.wrapping_add(17));
-    let highlight = OpenSimplex::new(seed.wrapping_add(97));
+fn generate_heightmap(seed: u32) -> Vec<f32> {
+    let land_macro = OpenSimplex::new(seed);
+    let rolling = Perlin::new(seed ^ 0x6D2B_79F5);
+    let mountain_mask_noise = OpenSimplex::new(seed ^ 0x1B56_C4E9);
+    let ridge_noise = Perlin::new(seed ^ 0x9E37_79B9);
+    let basin_macro = OpenSimplex::new(seed ^ 0xA53A_9E5D);
+    let basin_detail = Perlin::new(seed ^ 0xC13F_A9A9);
 
-    let mut bitmap = vec![0; BITMAP_PIXELS];
+    let mut heightmap = vec![0.0; BITMAP_PIXELS];
 
     for y in 0..BITMAP_SIZE {
         for x in 0..BITMAP_SIZE {
             let nx = x as f64 / BITMAP_SIZE as f64 - 0.5;
             let ny = y as f64 / BITMAP_SIZE as f64 - 0.5;
 
-            let warp_x = warp.get([nx * 1.6, ny * 1.6, 0.25]) * 0.35;
-            let warp_y = warp.get([nx * 1.6, ny * 1.6, 4.75]) * 0.35;
-            let sample_x = nx * 2.8 + warp_x;
-            let sample_y = ny * 2.8 + warp_y;
+            let broad_land =
+                (((land_macro.get([nx * 1.15, ny * 1.15, 0.3]) as f32) * 0.5) + 0.5).powf(1.15);
+            let rolling_land = fbm_perlin(&rolling, nx * 2.8, ny * 2.8, 5, 1.0, 2.05, 0.53);
 
-            let cloud = fbm_perlin(&base, sample_x, sample_y, 5, 1.0, 2.0, 0.52);
-            let detail_cloud =
-                fbm_perlin(&detail, sample_x * 2.4, sample_y * 2.4, 4, 1.0, 2.3, 0.46);
-            let highlight_mask =
-                (highlight.get([sample_x * 1.15, sample_y * 1.15, 1.7]) as f32 * 0.5) + 0.5;
-
-            let coverage = smoothstep(
-                -0.10,
-                0.70,
-                (cloud as f32 * 0.68) + (detail_cloud as f32 * 0.32),
+            let mountain_region = smoothstep(
+                0.48,
+                0.82,
+                ((mountain_mask_noise.get([nx * 1.7, ny * 1.7, 1.9]) as f32) * 0.5) + 0.5,
             );
-            let density = (coverage * (0.82 + highlight_mask * 0.18)).powf(1.35);
+            let ridges = ridged_fbm(&ridge_noise, nx * 4.4, ny * 4.4, 5, 1.0, 2.1, 0.55);
+            let mountains = mountain_region * ridges.powf(1.6) * 0.48;
 
-            bitmap[y * BITMAP_SIZE + x] = (density.clamp(0.0, 1.0) * 255.0).round() as u8;
+            let plains =
+                0.26 + broad_land * 0.28 + ((rolling_land as f32) * 0.14) + mountain_region * 0.03;
+
+            let basin_region = smoothstep(
+                0.58,
+                0.86,
+                ((basin_macro.get([nx * 1.1, ny * 1.1, 5.7]) as f32) * 0.5) + 0.5,
+            );
+            let basin_shape = smoothstep(
+                0.38,
+                0.92,
+                ((basin_detail.get([nx * 3.2, ny * 3.2, 2.4]) as f32) * 0.5) + 0.5,
+            );
+            let basins = basin_region * (0.16 + basin_shape * 0.26);
+
+            let altitude = (plains + mountains - basins).clamp(0.0, 1.0);
+            heightmap[y * BITMAP_SIZE + x] = altitude;
         }
     }
 
-    bitmap
+    heightmap
 }
 
 fn fbm_perlin(
@@ -318,6 +417,35 @@ fn fbm_perlin(
     }
 }
 
+fn ridged_fbm(
+    noise: &Perlin,
+    x: f64,
+    y: f64,
+    octaves: usize,
+    mut amplitude: f64,
+    lacunarity: f64,
+    gain: f64,
+) -> f32 {
+    let mut frequency = 1.0;
+    let mut sum = 0.0;
+    let mut amplitude_sum = 0.0;
+
+    for octave in 0..octaves {
+        let sample = noise.get([x * frequency, y * frequency, octave as f64 * 0.61]);
+        let ridge = 1.0 - sample.abs();
+        sum += ridge * amplitude;
+        amplitude_sum += amplitude;
+        amplitude *= gain;
+        frequency *= lacunarity;
+    }
+
+    if amplitude_sum == 0.0 {
+        0.0
+    } else {
+        (sum / amplitude_sum) as f32
+    }
+}
+
 fn screen_to_bitmap(rect: Rect, position: Pos2) -> Pos2 {
     let u = ((position.x - rect.left()) / rect.width()).clamp(0.0, 1.0);
     let v = ((position.y - rect.top()) / rect.height()).clamp(0.0, 1.0);
@@ -330,6 +458,43 @@ fn screen_to_bitmap(rect: Rect, position: Pos2) -> Pos2 {
 fn smoothstep(edge0: f32, edge1: f32, x: f32) -> f32 {
     let t = ((x - edge0) / (edge1 - edge0)).clamp(0.0, 1.0);
     t * t * (3.0 - 2.0 * t)
+}
+
+fn terrain_color(height: f32) -> [u8; 3] {
+    if height < SEA_LEVEL {
+        let depth = smoothstep(0.0, SEA_LEVEL, height);
+        return lerp_color([8, 34, 92], [78, 168, 236], depth.powf(0.78));
+    }
+
+    let land = (height - SEA_LEVEL) / (1.0 - SEA_LEVEL);
+    if land < 0.05 {
+        lerp_color([214, 198, 146], [188, 177, 123], land / 0.05)
+    } else if land < 0.28 {
+        lerp_color([124, 168, 92], [92, 146, 77], (land - 0.05) / 0.23)
+    } else if land < 0.55 {
+        lerp_color([92, 146, 77], [134, 126, 72], (land - 0.28) / 0.27)
+    } else if land < 0.78 {
+        lerp_color([134, 126, 72], [124, 116, 112], (land - 0.55) / 0.23)
+    } else {
+        lerp_color([124, 116, 112], [244, 246, 248], (land - 0.78) / 0.22)
+    }
+}
+
+fn lerp_color(start: [u8; 3], end: [u8; 3], t: f32) -> [u8; 3] {
+    [
+        lerp(start[0] as f32, end[0] as f32, t).round() as u8,
+        lerp(start[1] as f32, end[1] as f32, t).round() as u8,
+        lerp(start[2] as f32, end[2] as f32, t).round() as u8,
+    ]
+}
+
+fn next_seed() -> u32 {
+    let nanos = SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .map(|duration| duration.as_nanos() as u64)
+        .unwrap_or(1);
+    let mixed = nanos ^ (nanos >> 17) ^ (nanos << 13);
+    (mixed as u32).wrapping_mul(0x9E37_79B9)
 }
 
 fn lerp(start: f32, end: f32, t: f32) -> f32 {
