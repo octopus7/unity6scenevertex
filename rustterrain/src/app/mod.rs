@@ -12,7 +12,10 @@ use eframe::egui::{Pos2, TextureHandle};
 
 use crate::{terrain::generate_heightmap, tool::ToolKind, utils::next_seed};
 
-use self::{history::HistoryStack, stroke::StrokeSession};
+use self::{
+    history::{DocumentState, HistoryStack},
+    stroke::{ReplayStrokeRecord, StrokeSession},
+};
 
 pub struct TerrainApp {
     heightmap: Vec<f32>,
@@ -34,6 +37,8 @@ pub struct TerrainApp {
     active_heightmap_path: Option<PathBuf>,
     active_stroke: Option<StrokeSession>,
     history: HistoryStack,
+    replay_records: Vec<ReplayStrokeRecord>,
+    replay_sequence: u64,
 }
 
 impl TerrainApp {
@@ -60,8 +65,10 @@ impl TerrainApp {
             active_heightmap_path: None,
             active_stroke: None,
             history: HistoryStack::default(),
+            replay_records: Vec::new(),
+            replay_sequence: 0,
         };
-        app.initialize_history();
+        app.reset_history_with_current_state();
         app.autosave_heightmap();
         app.ensure_texture(&cc.egui_ctx);
         app
@@ -84,15 +91,51 @@ impl TerrainApp {
         self.finish_active_stroke();
         self.seed = next_seed();
         self.heightmap = generate_heightmap(self.seed);
+        self.active_heightmap_path = None;
+        self.target_height = 0.5;
+        self.reset_interaction_state();
+        self.reset_history_with_current_state();
+        self.clear_replay_records();
+        self.autosave_heightmap();
+    }
+
+    fn capture_document_state(&self) -> DocumentState {
+        DocumentState {
+            heightmap: self.heightmap.clone(),
+            seed: self.seed,
+            active_heightmap_path: self.active_heightmap_path.clone(),
+        }
+    }
+
+    fn restore_document_state(&mut self, state: DocumentState) {
+        self.heightmap = state.heightmap;
+        self.seed = state.seed;
+        self.active_heightmap_path = state.active_heightmap_path;
+        self.reset_interaction_state();
+    }
+
+    fn reset_history_with_current_state(&mut self) {
+        self.history = HistoryStack::with_initial(self.capture_document_state());
+    }
+
+    fn reset_interaction_state(&mut self) {
+        self.active_stroke = None;
         self.texture_dirty = true;
         self.pending_autosave = false;
         self.last_drag_pos = None;
-        self.active_heightmap_path = None;
-        self.hover_bitmap_pos = None;
         self.hover_pixel = None;
-        self.target_height = 0.5;
-        self.push_history_snapshot();
-        self.autosave_heightmap();
+        self.hover_bitmap_pos = None;
+    }
+
+    fn record_replay_stroke(&mut self, mut record: ReplayStrokeRecord) {
+        record.sequence = self.replay_sequence;
+        self.replay_sequence += 1;
+        self.replay_records.push(record);
+    }
+
+    fn clear_replay_records(&mut self) {
+        self.replay_records.clear();
+        self.replay_sequence = 0;
     }
 
     fn source_summary(&self) -> String {

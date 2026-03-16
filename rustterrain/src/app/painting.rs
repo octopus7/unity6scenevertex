@@ -6,7 +6,11 @@ use crate::{
     utils::{brush_bounds, lerp},
 };
 
-use super::{TerrainApp, stroke::StrokePixelState, stroke::StrokeSession};
+use super::{
+    TerrainApp,
+    history::TileDeltaEntry,
+    stroke::{StrokePixelState, StrokeSession},
+};
 
 impl TerrainApp {
     pub(super) fn stroke_action(
@@ -62,12 +66,29 @@ impl TerrainApp {
             return;
         }
 
-        self.push_history_snapshot();
+        let replay_record = session.build_replay_record(
+            self.brush_flow,
+            self.brush_opacity,
+            self.brush_radius,
+            self.target_height,
+        );
+        let tile_delta = TileDeltaEntry::new(session.export_tile_patches(&self.heightmap));
+        if tile_delta.is_empty() {
+            self.pending_autosave = false;
+            return;
+        }
+
+        let entry = self.history_entry_from_tile_delta(tile_delta, BITMAP_SIZE);
+        self.push_history_entry(entry, BITMAP_SIZE);
+        self.record_replay_stroke(replay_record);
         self.autosave_heightmap();
     }
 
     pub(super) fn apply_stroke(&mut self, from: Pos2, to: Pos2, action: StrokeAction) {
         self.begin_stroke(action);
+        if let Some(session) = &mut self.active_stroke {
+            session.record_segment(from, to);
+        }
 
         let distance = from.distance(to);
         let spacing = (self.brush_radius * 0.35).max(1.0);
@@ -201,9 +222,9 @@ impl TerrainApp {
             return;
         }
 
-        self.heightmap[idx] = next;
         if let Some(session) = &mut self.active_stroke {
-            session.mark_changed();
+            session.mark_tile_dirty(&self.heightmap, x, y);
         }
+        self.heightmap[idx] = next;
     }
 }
