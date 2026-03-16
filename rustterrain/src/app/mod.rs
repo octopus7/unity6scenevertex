@@ -6,7 +6,7 @@ mod rendering;
 mod stroke;
 mod ui;
 
-use std::path::PathBuf;
+use std::{mem::size_of, path::PathBuf};
 
 use eframe::egui::{Pos2, TextureHandle};
 
@@ -136,6 +136,19 @@ impl TerrainApp {
     fn clear_replay_records(&mut self) {
         self.replay_records.clear();
         self.replay_sequence = 0;
+    }
+
+    fn tile_memory_bytes(&self) -> usize {
+        StrokeSession::estimated_full_tile_bytes()
+    }
+
+    fn history_memory_bytes(&self) -> usize {
+        size_of::<Vec<ReplayStrokeRecord>>()
+            + self
+                .replay_records
+                .iter()
+                .map(ReplayStrokeRecord::estimated_bytes)
+                .sum::<usize>()
     }
 
     fn source_summary(&self) -> String {

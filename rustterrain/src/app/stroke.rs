@@ -1,4 +1,4 @@
-use std::collections::HashMap;
+use std::{collections::HashMap, mem::size_of};
 
 use eframe::egui::Pos2;
 
@@ -19,6 +19,12 @@ pub(super) struct ReplayStrokeRecord {
     pub radius: f32,
     pub target_height: f32,
     pub polyline: Vec<[f32; 2]>,
+}
+
+impl ReplayStrokeRecord {
+    pub(super) fn estimated_bytes(&self) -> usize {
+        size_of::<Self>() + self.polyline.len() * size_of::<[f32; 2]>()
+    }
 }
 
 #[derive(Clone, Copy, Debug)]
@@ -100,6 +106,25 @@ impl StrokeSession {
             target_height,
             polyline: self.polyline.clone(),
         }
+    }
+
+    pub(super) fn estimated_full_tile_bytes() -> usize {
+        let tiles_per_axis = (BITMAP_SIZE + STROKE_TILE_SIZE - 1) / STROKE_TILE_SIZE;
+        let mut total = 0;
+
+        for tile_y in 0..tiles_per_axis {
+            for tile_x in 0..tiles_per_axis {
+                let coord = TileCoord {
+                    x: tile_x,
+                    y: tile_y,
+                };
+                let (width, height) = StrokeTile::dimensions_for_coord(coord);
+                total += size_of::<(TileCoord, StrokeTile)>()
+                    + StrokeTile::estimated_bytes_for_dimensions(width, height);
+            }
+        }
+
+        total
     }
 
     pub(super) fn export_tile_patches(&self, heightmap: &[f32]) -> Vec<TilePatch> {
@@ -188,8 +213,7 @@ impl StrokeTile {
     fn capture(heightmap: &[f32], coord: TileCoord) -> Self {
         let origin_x = coord.x * STROKE_TILE_SIZE;
         let origin_y = coord.y * STROKE_TILE_SIZE;
-        let width = (BITMAP_SIZE - origin_x).min(STROKE_TILE_SIZE);
-        let height = (BITMAP_SIZE - origin_y).min(STROKE_TILE_SIZE);
+        let (width, height) = Self::dimensions_for_coord(coord);
         let mut base = vec![0.0; width * height];
 
         for row in 0..height {
@@ -215,5 +239,18 @@ impl StrokeTile {
         debug_assert!(x >= self.origin_x && x < self.origin_x + self.width);
         debug_assert!(y >= self.origin_y && y < self.origin_y + self.height);
         (y - self.origin_y) * self.width + (x - self.origin_x)
+    }
+
+    fn dimensions_for_coord(coord: TileCoord) -> (usize, usize) {
+        let origin_x = coord.x * STROKE_TILE_SIZE;
+        let origin_y = coord.y * STROKE_TILE_SIZE;
+        (
+            (BITMAP_SIZE - origin_x).min(STROKE_TILE_SIZE),
+            (BITMAP_SIZE - origin_y).min(STROKE_TILE_SIZE),
+        )
+    }
+
+    fn estimated_bytes_for_dimensions(width: usize, height: usize) -> usize {
+        size_of::<Self>() + (width * height * 2) * size_of::<f32>()
     }
 }

@@ -315,7 +315,6 @@ impl TerrainApp {
     pub(super) fn history_redo_steps(&self) -> usize {
         self.history.redo_steps()
     }
-
     fn apply_history_undo(&mut self, entry: HistoryEntry) {
         match entry {
             HistoryEntry::FullSnapshot(snapshot) => self.restore_document_state(snapshot.before),

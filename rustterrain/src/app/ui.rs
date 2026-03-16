@@ -90,11 +90,13 @@ impl TerrainApp {
 
                     ui.separator();
                     ui.label(format!(
-                        "History {}/{}  Undo {}  Redo {}",
+                        "Stack {}/{}  Undo {}  Redo {}  Tile {}  History {}",
                         self.history_cursor() + 1,
                         self.history_len(),
                         self.history_undo_steps(),
-                        self.history_redo_steps()
+                        self.history_redo_steps(),
+                        format_bytes(self.tile_memory_bytes()),
+                        format_bytes(self.history_memory_bytes()),
                     ));
                 });
 
@@ -142,6 +144,23 @@ impl TerrainApp {
         } else if redo_pressed {
             self.redo();
         }
+    }
+}
+
+fn format_bytes(bytes: usize) -> String {
+    const UNITS: [&str; 4] = ["B", "KB", "MB", "GB"];
+
+    let mut value = bytes as f64;
+    let mut unit = 0;
+    while value >= 1024.0 && unit + 1 < UNITS.len() {
+        value /= 1024.0;
+        unit += 1;
+    }
+
+    if unit == 0 {
+        format!("{bytes} {}", UNITS[unit])
+    } else {
+        format!("{value:.2} {}", UNITS[unit])
     }
 }
 
