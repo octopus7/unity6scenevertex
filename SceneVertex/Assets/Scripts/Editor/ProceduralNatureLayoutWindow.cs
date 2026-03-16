@@ -80,6 +80,11 @@ public sealed class ProceduralNatureLayoutWindow : EditorWindow
     [SerializeField] private bool saveScenesBeforeBake = true;
 
     private bool lastBakeRunning;
+    private long sceneVertexCount;
+    private int sceneMeshObjectCount;
+    private long layoutVertexCount;
+    private int layoutMeshObjectCount;
+    private string statsSceneName = string.Empty;
 
     [MenuItem("Tools/SceneVertex/Layout Window")]
     public static void OpenWindow()
@@ -91,6 +96,7 @@ public sealed class ProceduralNatureLayoutWindow : EditorWindow
     private void OnEnable()
     {
         lastBakeRunning = Lightmapping.isRunning;
+        RefreshSceneStats();
     }
 
     private void Update()
@@ -191,6 +197,22 @@ public sealed class ProceduralNatureLayoutWindow : EditorWindow
                 ClearBakedLighting();
             }
         }
+
+        GUILayout.Space(6f);
+        using (new EditorGUILayout.VerticalScope("box"))
+        {
+            EditorGUILayout.LabelField("Scene Stats", EditorStyles.boldLabel);
+            EditorGUILayout.LabelField("Scene", string.IsNullOrEmpty(statsSceneName) ? "(none)" : statsSceneName);
+            EditorGUILayout.LabelField("Scene Mesh Objects", sceneMeshObjectCount.ToString("N0"));
+            EditorGUILayout.LabelField("Scene Vertices", sceneVertexCount.ToString("N0"));
+            EditorGUILayout.LabelField("Auto Layout Mesh Objects", layoutMeshObjectCount.ToString("N0"));
+            EditorGUILayout.LabelField("Auto Layout Vertices", layoutVertexCount.ToString("N0"));
+
+            if (GUILayout.Button("Refresh Scene Stats"))
+            {
+                RefreshSceneStats();
+            }
+        }
     }
 
     private void EnsureGroundInActiveScene()
@@ -204,6 +226,7 @@ public sealed class ProceduralNatureLayoutWindow : EditorWindow
 
         EnsureGroundPlane(scene);
         EditorSceneManager.MarkSceneDirty(scene);
+        RefreshSceneStats();
     }
 
     [MenuItem("Tools/SceneVertex/Clear Placed Objects")]
@@ -255,6 +278,7 @@ public sealed class ProceduralNatureLayoutWindow : EditorWindow
 
         EditorSceneManager.MarkSceneDirty(scene);
         Undo.CollapseUndoOperations(undoGroup);
+        RefreshAllOpenWindowsSceneStats();
     }
 
     private void BuildLayoutInActiveScene()
@@ -290,6 +314,7 @@ public sealed class ProceduralNatureLayoutWindow : EditorWindow
         Selection.activeGameObject = container;
         EditorSceneManager.MarkSceneDirty(scene);
         Undo.CollapseUndoOperations(undoGroup);
+        RefreshSceneStats();
     }
 
     private void BakeSceneLighting()
@@ -348,6 +373,86 @@ public sealed class ProceduralNatureLayoutWindow : EditorWindow
         DynamicGI.UpdateEnvironment();
         Debug.Log($"Cleared baked lighting for scene '{scene.name}'.");
         Repaint();
+    }
+
+    private void RefreshSceneStats()
+    {
+        var scene = EditorSceneManager.GetActiveScene();
+        if (!scene.IsValid())
+        {
+            statsSceneName = string.Empty;
+            sceneMeshObjectCount = 0;
+            sceneVertexCount = 0;
+            layoutMeshObjectCount = 0;
+            layoutVertexCount = 0;
+            Repaint();
+            return;
+        }
+
+        statsSceneName = scene.name;
+        CollectMeshStats(scene, null, out sceneMeshObjectCount, out sceneVertexCount);
+
+        var layoutRoot = FindMarkedObject(scene, SceneVertexGeneratedObjectKind.LayoutRoot) ?? FindNamedObject(scene, LayoutRootName);
+        if (layoutRoot != null)
+        {
+            CollectMeshStats(scene, layoutRoot.transform, out layoutMeshObjectCount, out layoutVertexCount);
+        }
+        else
+        {
+            layoutMeshObjectCount = 0;
+            layoutVertexCount = 0;
+        }
+
+        Repaint();
+    }
+
+    private static void RefreshAllOpenWindowsSceneStats()
+    {
+        var windows = Resources.FindObjectsOfTypeAll<ProceduralNatureLayoutWindow>();
+        foreach (var window in windows)
+        {
+            window.RefreshSceneStats();
+        }
+    }
+
+    private static void CollectMeshStats(Scene scene, Transform root, out int meshObjectCount, out long vertexCount)
+    {
+        meshObjectCount = 0;
+        vertexCount = 0;
+
+        if (root != null)
+        {
+            AccumulateMeshStatsRecursive(root, ref meshObjectCount, ref vertexCount);
+            return;
+        }
+
+        foreach (var rootObject in scene.GetRootGameObjects())
+        {
+            AccumulateMeshStatsRecursive(rootObject.transform, ref meshObjectCount, ref vertexCount);
+        }
+    }
+
+    private static void AccumulateMeshStatsRecursive(Transform current, ref int meshObjectCount, ref long vertexCount)
+    {
+        var meshFilter = current.GetComponent<MeshFilter>();
+        var meshRenderer = current.GetComponent<MeshRenderer>();
+        if (meshFilter != null && meshRenderer != null && meshFilter.sharedMesh != null)
+        {
+            meshObjectCount++;
+            vertexCount += meshFilter.sharedMesh.vertexCount;
+        }
+
+        var skinnedMeshRenderer = current.GetComponent<SkinnedMeshRenderer>();
+        if (skinnedMeshRenderer != null && skinnedMeshRenderer.sharedMesh != null)
+        {
+            meshObjectCount++;
+            vertexCount += skinnedMeshRenderer.sharedMesh.vertexCount;
+        }
+
+        for (var i = 0; i < current.childCount; i++)
+        {
+            AccumulateMeshStatsRecursive(current.GetChild(i), ref meshObjectCount, ref vertexCount);
+        }
     }
 
     private RequiredAssets LoadRequiredAssets(bool allowGenerate)
