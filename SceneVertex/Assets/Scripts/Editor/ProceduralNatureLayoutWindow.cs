@@ -81,6 +81,7 @@ public sealed class ProceduralNatureLayoutWindow : EditorWindow
     [SerializeField] private int bushCount = 12;
     [SerializeField] private int mushroomCount = 16;
     [SerializeField] private int seed = 12345;
+    [SerializeField] private float densityMultiplier = 1f;
     [SerializeField] private bool replacePreviousLayout = true;
     [SerializeField] private bool generateMissingAssets = true;
     [SerializeField] private bool enableBatchingStatic;
@@ -135,6 +136,8 @@ public sealed class ProceduralNatureLayoutWindow : EditorWindow
         {
             pattern = (PlacementPattern)EditorGUILayout.EnumPopup("Pattern", pattern);
             seed = EditorGUILayout.IntField("Seed", seed);
+            densityMultiplier = EditorGUILayout.Slider("Density Multiplier", densityMultiplier, 0.25f, 40f);
+            EditorGUILayout.LabelField("Effective Scale", $"x{densityMultiplier:0.00}");
             replacePreviousLayout = EditorGUILayout.ToggleLeft("Replace previous auto layout", replacePreviousLayout);
             generateMissingAssets = EditorGUILayout.ToggleLeft("Generate missing procedural assets", generateMissingAssets);
             enableBatchingStatic = EditorGUILayout.ToggleLeft("Enable Batching Static", enableBatchingStatic);
@@ -149,6 +152,14 @@ public sealed class ProceduralNatureLayoutWindow : EditorWindow
             flowerCount = Mathf.Max(0, EditorGUILayout.IntField("Flowers", flowerCount));
             bushCount = Mathf.Max(0, EditorGUILayout.IntField("Bushes", bushCount));
             mushroomCount = Mathf.Max(0, EditorGUILayout.IntField("Mushrooms", mushroomCount));
+            EditorGUILayout.Space(4f);
+            EditorGUILayout.LabelField("Effective Counts", EditorStyles.miniBoldLabel);
+            EditorGUILayout.LabelField("Trees", GetEffectiveCount(treeCount).ToString("N0"));
+            EditorGUILayout.LabelField("Rocks", GetEffectiveCount(rockCount).ToString("N0"));
+            EditorGUILayout.LabelField("Fences", GetEffectiveCount(fenceCount).ToString("N0"));
+            EditorGUILayout.LabelField("Flowers", GetEffectiveCount(flowerCount).ToString("N0"));
+            EditorGUILayout.LabelField("Bushes", GetEffectiveCount(bushCount).ToString("N0"));
+            EditorGUILayout.LabelField("Mushrooms", GetEffectiveCount(mushroomCount).ToString("N0"));
         }
 
         GUILayout.Space(6f);
@@ -541,36 +552,79 @@ public sealed class ProceduralNatureLayoutWindow : EditorWindow
     {
         var requests = new List<PlacementRequest>();
         var occupied = new List<OccupiedCircle>();
-        AddRandomFenceRuns(requests, occupied, rng, fenceCount);
-        AddScatter(requests, occupied, rng, ProceduralNaturePropCategory.Tree, treeCount, 4f, candidate => candidate.magnitude > 10f);
-        AddScatter(requests, occupied, rng, ProceduralNaturePropCategory.Rock, rockCount, 3f, candidate => candidate.magnitude > 6f);
-        AddScatter(requests, occupied, rng, ProceduralNaturePropCategory.Bush, bushCount, 2.5f, candidate => candidate.magnitude > 6f && candidate.magnitude < 38f);
-        AddClusteredProps(requests, occupied, rng, ProceduralNaturePropCategory.Flower, flowerCount, new[] { new Vector2(-10f, 8f), new Vector2(8f, -5f), new Vector2(3f, 12f) }, 5.2f);
-        AddClusteredProps(requests, occupied, rng, ProceduralNaturePropCategory.Mushroom, mushroomCount, new[] { new Vector2(-18f, -10f), new Vector2(16f, 8f), new Vector2(0f, -16f) }, 3.6f);
+        AddRandomFenceRuns(requests, occupied, rng, GetEffectiveCount(fenceCount));
+        AddScatter(requests, occupied, rng, ProceduralNaturePropCategory.Tree, GetEffectiveCount(treeCount), 4f, candidate => candidate.magnitude > 10f);
+        AddScatter(requests, occupied, rng, ProceduralNaturePropCategory.Rock, GetEffectiveCount(rockCount), 3f, candidate => candidate.magnitude > 6f);
+        AddScatter(requests, occupied, rng, ProceduralNaturePropCategory.Bush, GetEffectiveCount(bushCount), 2.5f, candidate => candidate.magnitude > 6f && candidate.magnitude < 38f);
+        AddClusteredProps(requests, occupied, rng, ProceduralNaturePropCategory.Flower, GetEffectiveCount(flowerCount), new[] { new Vector2(-10f, 8f), new Vector2(8f, -5f), new Vector2(3f, 12f) }, 5.2f);
+        AddClusteredProps(requests, occupied, rng, ProceduralNaturePropCategory.Mushroom, GetEffectiveCount(mushroomCount), new[] { new Vector2(-18f, -10f), new Vector2(16f, 8f), new Vector2(0f, -16f) }, 3.6f);
         return requests;
     }
 
     private List<PlacementRequest> BuildNaturalClearing(System.Random rng)
     {
         var requests = new List<PlacementRequest>();
-        AddRing(requests, rng, ProceduralNaturePropCategory.Tree, treeCount, 33f, 40f, -10f, 8f, 10f);
-        AddArc(requests, rng, ProceduralNaturePropCategory.Rock, rockCount, 208f, 320f, 22f, 30f, 18f);
-        AddRing(requests, rng, ProceduralNaturePropCategory.Bush, bushCount, 16f, 24f, 22f, 4f, 16f);
-        AddFenceEdge(requests, rng, fenceCount, 38f);
-        AddClusteredPattern(requests, rng, ProceduralNaturePropCategory.Flower, flowerCount, new[] { new Vector2(0f, 1f), new Vector2(-6f, -4f), new Vector2(7f, 5f) }, 4.8f);
-        AddClusteredPattern(requests, rng, ProceduralNaturePropCategory.Mushroom, mushroomCount, new[] { new Vector2(-13f, 14f), new Vector2(12f, 12f), new Vector2(-16f, -6f), new Vector2(15f, -9f) }, 3.2f);
+        AddRing(requests, rng, ProceduralNaturePropCategory.Tree, GetEffectiveCount(treeCount), 33f, 40f, -10f, 8f, 10f);
+        AddArc(requests, rng, ProceduralNaturePropCategory.Rock, GetEffectiveCount(rockCount), 208f, 320f, 22f, 30f, 18f);
+        AddRing(requests, rng, ProceduralNaturePropCategory.Bush, GetEffectiveCount(bushCount), 16f, 24f, 22f, 4f, 16f);
+        AddFenceEdge(requests, rng, GetEffectiveCount(fenceCount), 38f);
+        AddClusteredPattern(requests, rng, ProceduralNaturePropCategory.Flower, GetEffectiveCount(flowerCount), new[] { new Vector2(0f, 1f), new Vector2(-6f, -4f), new Vector2(7f, 5f) }, 4.8f);
+        AddClusteredPattern(requests, rng, ProceduralNaturePropCategory.Mushroom, GetEffectiveCount(mushroomCount), new[] { new Vector2(-13f, 14f), new Vector2(12f, 12f), new Vector2(-16f, -6f), new Vector2(15f, -9f) }, 3.2f);
         return requests;
     }
 
     private List<PlacementRequest> BuildGardenLayout(System.Random rng)
     {
         var requests = new List<PlacementRequest>();
-        AddGardenFenceLoop(requests, rng, fenceCount);
-        AddFlowerGrid(requests, rng, flowerCount);
-        AddAnchoredProps(requests, rng, ProceduralNaturePropCategory.Tree, treeCount, new[] { new Vector2(-22f, -14f), new Vector2(22f, -14f), new Vector2(-22f, 14f), new Vector2(22f, 14f), new Vector2(0f, 24f), new Vector2(-28f, 0f), new Vector2(28f, 0f) }, 1.6f);
-        AddAnchoredProps(requests, rng, ProceduralNaturePropCategory.Rock, rockCount, new[] { new Vector2(-6f, -16f), new Vector2(6f, -16f), new Vector2(-18f, -2f), new Vector2(18f, -2f), new Vector2(-14f, 13f), new Vector2(14f, 13f) }, 1.2f);
-        AddAnchoredProps(requests, rng, ProceduralNaturePropCategory.Bush, bushCount, new[] { new Vector2(-12f, -9f), new Vector2(12f, -9f), new Vector2(-15f, 8f), new Vector2(15f, 8f), new Vector2(0f, 10f), new Vector2(-7f, 0f), new Vector2(7f, 0f) }, 1.1f);
-        AddClusteredPattern(requests, rng, ProceduralNaturePropCategory.Mushroom, mushroomCount, new[] { new Vector2(-18f, 16f), new Vector2(18f, 16f), new Vector2(-20f, -12f), new Vector2(20f, -12f) }, 2.4f);
+        var occupied = new List<OccupiedCircle>();
+
+        var fenceStartIndex = requests.Count;
+        AddGardenFenceLoop(requests, rng, GetEffectiveCount(fenceCount));
+        ReserveOccupied(requests, fenceStartIndex, occupied);
+
+        var flowerStartIndex = requests.Count;
+        AddFlowerGrid(requests, rng, GetEffectiveCount(flowerCount));
+        ReserveOccupied(requests, flowerStartIndex, occupied);
+
+        AddAnchoredPropsSpread(
+            requests,
+            occupied,
+            rng,
+            ProceduralNaturePropCategory.Tree,
+            GetEffectiveCount(treeCount),
+            new[] { new Vector2(-22f, -14f), new Vector2(22f, -14f), new Vector2(-22f, 14f), new Vector2(22f, 14f), new Vector2(0f, 24f), new Vector2(-28f, 0f), new Vector2(28f, 0f) },
+            1.6f,
+            8f,
+            candidate => IsInsideGardenBand(candidate, 30f, 26f, 18f, 12f));
+        AddAnchoredPropsSpread(
+            requests,
+            occupied,
+            rng,
+            ProceduralNaturePropCategory.Rock,
+            GetEffectiveCount(rockCount),
+            new[] { new Vector2(-6f, -16f), new Vector2(6f, -16f), new Vector2(-18f, -2f), new Vector2(18f, -2f), new Vector2(-14f, 13f), new Vector2(14f, 13f) },
+            1.2f,
+            6f,
+            candidate => IsInsideGardenBand(candidate, 24f, 18f, 12f, 8f));
+        AddAnchoredPropsSpread(
+            requests,
+            occupied,
+            rng,
+            ProceduralNaturePropCategory.Bush,
+            GetEffectiveCount(bushCount),
+            new[] { new Vector2(-12f, -9f), new Vector2(12f, -9f), new Vector2(-15f, 8f), new Vector2(15f, 8f), new Vector2(0f, 10f), new Vector2(-7f, 0f), new Vector2(7f, 0f) },
+            1.1f,
+            4.5f,
+            candidate => IsInsideGardenBand(candidate, 18f, 13f, 10f, 6f));
+        AddClusteredProps(
+            requests,
+            occupied,
+            rng,
+            ProceduralNaturePropCategory.Mushroom,
+            GetEffectiveCount(mushroomCount),
+            new[] { new Vector2(-18f, 16f), new Vector2(18f, 16f), new Vector2(-20f, -12f), new Vector2(20f, -12f) },
+            2.4f,
+            candidate => IsInsideGardenBand(candidate, 24f, 18f, 14f, 10f));
         return requests;
     }
 
@@ -728,6 +782,11 @@ public sealed class ProceduralNatureLayoutWindow : EditorWindow
             : BasePlacementStaticFlags;
     }
 
+    private int GetEffectiveCount(int baseCount)
+    {
+        return Mathf.Max(0, Mathf.RoundToInt(baseCount * densityMultiplier));
+    }
+
     private static GameObject GetOrCreateLayoutRoot(Scene scene)
     {
         var root = FindMarkedObject(scene, SceneVertexGeneratedObjectKind.LayoutRoot) ?? FindNamedObject(scene, LayoutRootName);
@@ -803,33 +862,29 @@ public sealed class ProceduralNatureLayoutWindow : EditorWindow
         }
     }
 
-    private void AddClusteredProps(List<PlacementRequest> requests, List<OccupiedCircle> occupied, System.Random rng, ProceduralNaturePropCategory kind, int count, IReadOnlyList<Vector2> centers, float clusterRadius)
+    private void AddClusteredProps(
+        List<PlacementRequest> requests,
+        List<OccupiedCircle> occupied,
+        System.Random rng,
+        ProceduralNaturePropCategory kind,
+        int count,
+        IReadOnlyList<Vector2> centers,
+        float clusterRadius,
+        Predicate<Vector2> fallbackPredicate = null)
     {
         for (var i = 0; i < count; i++)
         {
             var center = centers[i % centers.Count];
             var scale = NextScale(rng, kind);
             var radius = GetFootprintRadius(kind, scale);
-            var placed = false;
-
-            for (var attempt = 0; attempt < 50; attempt++)
+            if (TryFindPackedPointNearAnchor(rng, occupied, center, radius, Mathf.Min(clusterRadius * 0.35f, 1.2f), clusterRadius, out var candidate))
             {
-                var candidate = center + RandomInsideCircle(rng, clusterRadius);
-                if (!IsInsideBounds(candidate, 3f) || IntersectsOccupied(candidate, radius, occupied))
-                {
-                    continue;
-                }
-
                 occupied.Add(new OccupiedCircle(candidate, radius));
                 requests.Add(CreateRequest(rng, kind, candidate, NextYaw(rng, kind), scale));
-                placed = true;
-                break;
+                continue;
             }
 
-            if (!placed)
-            {
-                AddScatter(requests, occupied, rng, kind, 1, 2f, _ => true);
-            }
+            AddScatter(requests, occupied, rng, kind, 1, 2f, fallbackPredicate ?? (_ => true));
         }
     }
 
@@ -987,6 +1042,33 @@ public sealed class ProceduralNatureLayoutWindow : EditorWindow
         }
     }
 
+    private void AddAnchoredPropsSpread(
+        List<PlacementRequest> requests,
+        List<OccupiedCircle> occupied,
+        System.Random rng,
+        ProceduralNaturePropCategory kind,
+        int count,
+        IReadOnlyList<Vector2> anchors,
+        float jitter,
+        float maxSearchRadius,
+        Predicate<Vector2> fallbackPredicate)
+    {
+        for (var i = 0; i < count; i++)
+        {
+            var anchor = anchors[i % anchors.Count];
+            var scale = NextScale(rng, kind);
+            var radius = GetFootprintRadius(kind, scale);
+            if (!TryFindPackedPointNearAnchor(rng, occupied, anchor, radius, jitter, maxSearchRadius, out var position) &&
+                !TryFindPoint(rng, occupied, radius, radius + 2f, fallbackPredicate, out position))
+            {
+                continue;
+            }
+
+            occupied.Add(new OccupiedCircle(position, radius));
+            requests.Add(CreateRequest(rng, kind, position, NextYaw(rng, kind), scale));
+        }
+    }
+
     private static List<PlacementAnchor> BuildGardenFenceCandidates()
     {
         const float halfWidth = 17f;
@@ -1060,6 +1142,66 @@ public sealed class ProceduralNatureLayoutWindow : EditorWindow
         return false;
     }
 
+    private static bool TryFindPackedPointNearAnchor(
+        System.Random rng,
+        List<OccupiedCircle> occupied,
+        Vector2 anchor,
+        float radius,
+        float jitter,
+        float maxSearchRadius,
+        out Vector2 point)
+    {
+        for (var attempt = 0; attempt < 8; attempt++)
+        {
+            var candidate = anchor + new Vector2(NextRange(rng, -jitter, jitter), NextRange(rng, -jitter, jitter));
+            if (!IsPlacementValid(candidate, radius, occupied))
+            {
+                continue;
+            }
+
+            point = candidate;
+            return true;
+        }
+
+        var radialStep = Mathf.Max(radius * 0.58f, 0.45f);
+        var tangentialStep = Mathf.Max(radius * 0.9f, 0.7f);
+        var ringCount = Mathf.Max(1, Mathf.CeilToInt(maxSearchRadius / radialStep));
+        var angleOffset = NextRange(rng, 0f, Mathf.PI * 2f);
+
+        for (var ringIndex = 1; ringIndex <= ringCount; ringIndex++)
+        {
+            var candidateRadius = Mathf.Min(maxSearchRadius, ringIndex * radialStep);
+            var circumference = Mathf.Max(candidateRadius * Mathf.PI * 2f, tangentialStep);
+            var stepCount = Mathf.Clamp(Mathf.CeilToInt(circumference / tangentialStep), 10, 40);
+
+            for (var stepIndex = 0; stepIndex < stepCount; stepIndex++)
+            {
+                var angle = angleOffset + stepIndex * (Mathf.PI * 2f / stepCount);
+                var direction = new Vector2(Mathf.Cos(angle), Mathf.Sin(angle));
+                var candidate = anchor + direction * candidateRadius + new Vector2(NextRange(rng, -jitter * 0.25f, jitter * 0.25f), NextRange(rng, -jitter * 0.25f, jitter * 0.25f));
+                if (!IsPlacementValid(candidate, radius, occupied))
+                {
+                    continue;
+                }
+
+                point = candidate;
+                return true;
+            }
+        }
+
+        point = default;
+        return false;
+    }
+
+    private static void ReserveOccupied(List<PlacementRequest> requests, int startIndex, List<OccupiedCircle> occupied)
+    {
+        for (var i = startIndex; i < requests.Count; i++)
+        {
+            var request = requests[i];
+            occupied.Add(new OccupiedCircle(request.Position, GetFootprintRadius(request.Kind, request.UniformScale)));
+        }
+    }
+
     private static bool IntersectsOccupied(Vector2 candidate, float radius, List<OccupiedCircle> occupied)
     {
         foreach (var item in occupied)
@@ -1077,6 +1219,18 @@ public sealed class ProceduralNatureLayoutWindow : EditorWindow
     private static bool IsInsideBounds(Vector2 point, float margin)
     {
         return point.x >= -HalfGroundSize + margin && point.x <= HalfGroundSize - margin && point.y >= -HalfGroundSize + margin && point.y <= HalfGroundSize - margin;
+    }
+
+    private static bool IsPlacementValid(Vector2 point, float radius, List<OccupiedCircle> occupied)
+    {
+        return IsInsideBounds(point, radius + 2f) && !IntersectsOccupied(point, radius, occupied);
+    }
+
+    private static bool IsInsideGardenBand(Vector2 point, float outerHalfWidth, float outerHalfHeight, float innerHalfWidth, float innerHalfHeight)
+    {
+        return Mathf.Abs(point.x) <= outerHalfWidth &&
+               Mathf.Abs(point.y) <= outerHalfHeight &&
+               (Mathf.Abs(point.x) >= innerHalfWidth || Mathf.Abs(point.y) >= innerHalfHeight);
     }
 
     private static Vector2 RandomInsideCircle(System.Random rng, float radius)
