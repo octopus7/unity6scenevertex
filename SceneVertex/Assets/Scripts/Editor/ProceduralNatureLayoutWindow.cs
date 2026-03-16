@@ -67,7 +67,7 @@ public sealed class ProceduralNatureLayoutWindow : EditorWindow
     private const string LayoutRootName = "SceneVertex_AutoLayout";
     private const float GroundSize = 100f;
     private const float HalfGroundSize = GroundSize * 0.5f;
-    private const StaticEditorFlags PlacementStaticFlags =
+    private const StaticEditorFlags BasePlacementStaticFlags =
         StaticEditorFlags.ContributeGI |
         StaticEditorFlags.OccludeeStatic |
         StaticEditorFlags.OccluderStatic |
@@ -83,6 +83,7 @@ public sealed class ProceduralNatureLayoutWindow : EditorWindow
     [SerializeField] private int seed = 12345;
     [SerializeField] private bool replacePreviousLayout = true;
     [SerializeField] private bool generateMissingAssets = true;
+    [SerializeField] private bool enableBatchingStatic;
     [SerializeField] private bool saveScenesBeforeBake = true;
 
     private bool lastBakeRunning;
@@ -136,6 +137,7 @@ public sealed class ProceduralNatureLayoutWindow : EditorWindow
             seed = EditorGUILayout.IntField("Seed", seed);
             replacePreviousLayout = EditorGUILayout.ToggleLeft("Replace previous auto layout", replacePreviousLayout);
             generateMissingAssets = EditorGUILayout.ToggleLeft("Generate missing procedural assets", generateMissingAssets);
+            enableBatchingStatic = EditorGUILayout.ToggleLeft("Enable Batching Static", enableBatchingStatic);
         }
 
         using (new EditorGUILayout.VerticalScope("box"))
@@ -577,14 +579,14 @@ public sealed class ProceduralNatureLayoutWindow : EditorWindow
             meshFilter.sharedMesh = sourceMesh;
             meshRenderer.sharedMaterial = assets.SharedMaterial;
             meshRenderer.receiveGI = ReceiveGI.Lightmaps;
-            GameObjectUtility.SetStaticEditorFlags(gameObject, PlacementStaticFlags);
+            GameObjectUtility.SetStaticEditorFlags(gameObject, GetPlacementStaticFlags());
 
             var verticalOffset = -sourceMesh.bounds.min.y * request.UniformScale;
             gameObject.transform.position = new Vector3(request.Position.x, verticalOffset, request.Position.y);
         }
     }
 
-    private static GameObject EnsureGroundPlane(Scene scene)
+    private GameObject EnsureGroundPlane(Scene scene)
     {
         var plane = FindMarkedObject(scene, SceneVertexGeneratedObjectKind.GroundPlane) ?? FindNamedObject(scene, GroundName);
         if (plane == null)
@@ -597,7 +599,7 @@ public sealed class ProceduralNatureLayoutWindow : EditorWindow
         plane.transform.position = Vector3.zero;
         plane.transform.rotation = Quaternion.identity;
         plane.transform.localScale = new Vector3(GroundSize / 10f, 1f, GroundSize / 10f);
-        GameObjectUtility.SetStaticEditorFlags(plane, PlacementStaticFlags);
+        GameObjectUtility.SetStaticEditorFlags(plane, GetPlacementStaticFlags());
 
         var meshFilter = plane.GetComponent<MeshFilter>();
         if (meshFilter == null)
@@ -702,6 +704,13 @@ public sealed class ProceduralNatureLayoutWindow : EditorWindow
                 triangles[triangleIndex++] = bottomRight;
             }
         }
+    }
+
+    private StaticEditorFlags GetPlacementStaticFlags()
+    {
+        return enableBatchingStatic
+            ? BasePlacementStaticFlags | StaticEditorFlags.BatchingStatic
+            : BasePlacementStaticFlags;
     }
 
     private static GameObject GetOrCreateLayoutRoot(Scene scene)
