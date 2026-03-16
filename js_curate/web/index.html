@@ -1,0 +1,73 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Pasture Trail Prototype</title>
+  <link rel="stylesheet" href="./styles.css">
+</head>
+<body>
+  <div class="app-shell">
+    <aside class="control-panel">
+      <header class="panel-block panel-header">
+        <p class="eyebrow">Procedural Terrain</p>
+        <h1>Pasture Trail Prototype</h1>
+        <p class="panel-copy">
+          외부 JSON을 입력으로 읽지 않고, 고도맵과 절차 생성 규칙으로 장면을 만든 뒤
+          메모리상의 scene 내용을 JSON으로 export/import 합니다.
+        </p>
+      </header>
+
+      <section class="panel-block toolbar">
+        <button type="button" id="randomize-seed">Randomize Seed</button>
+        <button type="button" id="reset-defaults">Reset Defaults</button>
+        <button type="button" id="regenerate-scene">Regenerate</button>
+        <button type="button" id="export-png">Export PNG</button>
+        <button type="button" id="copy-share-url">Copy Share URL</button>
+        <button type="button" id="export-scene-json">Export Scene JSON</button>
+        <button type="button" id="import-scene-json">Import Scene JSON</button>
+        <input type="file" id="scene-json-input" accept="application/json,.json" hidden>
+      </section>
+
+      <section class="panel-block status-card">
+        <p class="eyebrow">Status</p>
+        <p id="status-text">Initializing…</p>
+      </section>
+
+      <section class="panel-block summary-card">
+        <div class="summary-head">
+          <div>
+            <p class="eyebrow">Snapshot</p>
+            <p id="scene-name" class="scene-name">PastureTrailPreview</p>
+          </div>
+          <span id="scene-source" class="summary-chip">procedural</span>
+        </div>
+        <dl id="scene-summary" class="summary-grid"></dl>
+      </section>
+
+      <section id="controls" class="controls"></section>
+    </aside>
+
+    <main class="preview-panel">
+      <section class="preview-frame">
+        <div class="preview-head">
+          <div>
+            <p class="eyebrow">Canvas</p>
+            <h2>1024 x 512 Top View</h2>
+          </div>
+        </div>
+        <div class="canvas-shell">
+          <canvas id="preview-canvas" width="1024" height="512"></canvas>
+        </div>
+      </section>
+    </main>
+  </div>
+
+  <script src="./params.js"></script>
+  <script src="./palette.js"></script>
+  <script src="./heightmap.js"></script>
+  <script src="./generator.js"></script>
+  <script src="./renderer.js"></script>
+  <script src="./app.js"></script>
+</body>
+</html>
