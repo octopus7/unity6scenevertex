@@ -41,9 +41,9 @@ impl ToolKind {
     }
 }
 
-#[derive(Clone, Copy)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum StrokeAction {
-    Standard(f32),
+    Standard { direction: i8 },
     TargetHeight,
     Blur,
 }

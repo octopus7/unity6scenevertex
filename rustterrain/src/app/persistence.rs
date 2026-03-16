@@ -25,6 +25,7 @@ impl TerrainApp {
     }
 
     pub(super) fn save_heightmap_dialog(&mut self) {
+        self.finish_active_stroke();
         let dialog = self
             .png_dialog()
             .set_file_name(self.suggested_heightmap_name());
@@ -42,10 +43,12 @@ impl TerrainApp {
     }
 
     pub(super) fn load_heightmap_dialog(&mut self) {
+        self.finish_active_stroke();
         if let Some(path) = self.png_dialog().pick_file() {
             match self.load_heightmap_png(&path) {
                 Ok(()) => {
                     self.active_heightmap_path = Some(path.clone());
+                    self.push_history_snapshot();
                     self.status_message = format!("Loaded {}", path.display());
                 }
                 Err(error) => {
@@ -56,6 +59,7 @@ impl TerrainApp {
     }
 
     pub(super) fn export_contours_dialog(&mut self) {
+        self.finish_active_stroke();
         let dialog = self
             .png_dialog()
             .set_file_name(self.suggested_contour_name());

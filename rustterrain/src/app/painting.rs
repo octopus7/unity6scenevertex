@@ -1,12 +1,12 @@
 use eframe::egui::Pos2;
 
 use crate::{
-    constants::{BITMAP_SIZE, STANDARD_STRENGTH_SCALE},
+    constants::BITMAP_SIZE,
     tool::{StrokeAction, ToolKind},
     utils::{brush_bounds, lerp},
 };
 
-use super::TerrainApp;
+use super::{TerrainApp, stroke::StrokePixelState, stroke::StrokeSession};
 
 impl TerrainApp {
     pub(super) fn stroke_action(
@@ -15,12 +15,10 @@ impl TerrainApp {
         secondary_active: bool,
     ) -> Option<StrokeAction> {
         match self.active_tool {
-            ToolKind::Standard if primary_active => Some(StrokeAction::Standard(
-                self.brush_strength * STANDARD_STRENGTH_SCALE,
-            )),
-            ToolKind::Standard if secondary_active => Some(StrokeAction::Standard(
-                -self.brush_strength * STANDARD_STRENGTH_SCALE,
-            )),
+            ToolKind::Standard if primary_active => Some(StrokeAction::Standard { direction: 1 }),
+            ToolKind::Standard if secondary_active => {
+                Some(StrokeAction::Standard { direction: -1 })
+            }
             ToolKind::TargetHeight if primary_active => Some(StrokeAction::TargetHeight),
             ToolKind::Blur if primary_active => Some(StrokeAction::Blur),
             _ => None,
@@ -41,7 +39,36 @@ impl TerrainApp {
         };
     }
 
+    pub(super) fn begin_stroke(&mut self, action: StrokeAction) {
+        let restart = self
+            .active_stroke
+            .as_ref()
+            .is_none_or(|session| session.action() != action);
+
+        if restart {
+            self.finish_active_stroke();
+            self.active_stroke = Some(StrokeSession::new(action));
+        }
+    }
+
+    pub(super) fn finish_active_stroke(&mut self) {
+        let Some(session) = self.active_stroke.take() else {
+            return;
+        };
+
+        self.last_drag_pos = None;
+        if !session.changed() {
+            self.pending_autosave = false;
+            return;
+        }
+
+        self.push_history_snapshot();
+        self.autosave_heightmap();
+    }
+
     pub(super) fn apply_stroke(&mut self, from: Pos2, to: Pos2, action: StrokeAction) {
+        self.begin_stroke(action);
+
         let distance = from.distance(to);
         let spacing = (self.brush_radius * 0.35).max(1.0);
         let steps = (distance / spacing).ceil().max(1.0) as usize;
@@ -50,7 +77,9 @@ impl TerrainApp {
             let t = step as f32 / steps as f32;
             let point = Pos2::new(lerp(from.x, to.x, t), lerp(from.y, to.y, t));
             match action {
-                StrokeAction::Standard(amount) => self.paint_standard_disc(point, amount),
+                StrokeAction::Standard { direction } => {
+                    self.paint_standard_disc(point, direction);
+                }
                 StrokeAction::TargetHeight => self.paint_target_disc(point),
                 StrokeAction::Blur => self.paint_blur_disc(point),
             }
@@ -60,7 +89,7 @@ impl TerrainApp {
         self.pending_autosave = true;
     }
 
-    fn paint_standard_disc(&mut self, center: Pos2, amount: f32) {
+    fn paint_standard_disc(&mut self, center: Pos2, direction: i8) {
         let radius = self.brush_radius;
         let radius_sq = radius * radius;
         let (x_min, x_max, y_min, y_max) = brush_bounds(center, radius);
@@ -74,11 +103,11 @@ impl TerrainApp {
                     continue;
                 }
 
-                let falloff = 1.0 - (distance_sq / radius_sq);
-                let idx = y as usize * BITMAP_SIZE + x as usize;
-                let current = self.heightmap[idx];
-                let updated = (current + amount * falloff).clamp(0.0, 1.0);
-                self.heightmap[idx] = updated;
+                let flow = self.brush_flow * (1.0 - (distance_sq / radius_sq));
+                let pixel = self.stroke_accumulate_pixel(x as usize, y as usize, flow);
+                let delta = self.brush_opacity * pixel.coverage * direction as f32;
+                let next = (pixel.base + delta).clamp(0.0, 1.0);
+                self.apply_stroke_result(x as usize, y as usize, next);
             }
         }
     }
@@ -97,11 +126,11 @@ impl TerrainApp {
                     continue;
                 }
 
-                let falloff = 1.0 - (distance_sq / radius_sq);
-                let idx = y as usize * BITMAP_SIZE + x as usize;
-                let current = self.heightmap[idx];
-                let blend = (self.brush_strength * falloff).clamp(0.0, 1.0);
-                self.heightmap[idx] = lerp(current, self.target_height, blend);
+                let flow = self.brush_flow * (1.0 - (distance_sq / radius_sq));
+                let pixel = self.stroke_accumulate_pixel(x as usize, y as usize, flow);
+                let alpha = (self.brush_opacity * pixel.coverage).clamp(0.0, 1.0);
+                let next = lerp(pixel.base, self.target_height, alpha);
+                self.apply_stroke_result(x as usize, y as usize, next);
             }
         }
     }
@@ -110,20 +139,6 @@ impl TerrainApp {
         let radius = self.brush_radius;
         let radius_sq = radius * radius;
         let (x_min, x_max, y_min, y_max) = brush_bounds(center, radius);
-        let sample_x_min = (x_min - 1).max(0);
-        let sample_x_max = (x_max + 1).min(BITMAP_SIZE as i32 - 1);
-        let sample_y_min = (y_min - 1).max(0);
-        let sample_y_max = (y_max + 1).min(BITMAP_SIZE as i32 - 1);
-        let sample_width = (sample_x_max - sample_x_min + 1) as usize;
-        let sample_height = (sample_y_max - sample_y_min + 1) as usize;
-        let mut source = vec![0.0; sample_width * sample_height];
-
-        for sample_y in sample_y_min..=sample_y_max {
-            let src_offset = sample_y as usize * BITMAP_SIZE + sample_x_min as usize;
-            let dst_offset = (sample_y - sample_y_min) as usize * sample_width;
-            source[dst_offset..dst_offset + sample_width]
-                .copy_from_slice(&self.heightmap[src_offset..src_offset + sample_width]);
-        }
 
         for y in y_min..=y_max {
             for x in x_min..=x_max {
@@ -134,34 +149,61 @@ impl TerrainApp {
                     continue;
                 }
 
-                let mut blurred_sum = 0.0;
-                let mut weight_sum = 0.0;
-                let sample_local_x = x - sample_x_min;
-                let sample_local_y = y - sample_y_min;
-
-                for kernel_y in -1..=1 {
-                    for kernel_x in -1..=1 {
-                        let weight = match (kernel_x, kernel_y) {
-                            (0, 0) => 4.0,
-                            (0, _) | (_, 0) => 2.0,
-                            _ => 1.0,
-                        };
-                        let source_x =
-                            (sample_local_x + kernel_x).clamp(0, sample_width as i32 - 1) as usize;
-                        let source_y =
-                            (sample_local_y + kernel_y).clamp(0, sample_height as i32 - 1) as usize;
-                        blurred_sum += source[source_y * sample_width + source_x] * weight;
-                        weight_sum += weight;
-                    }
-                }
-
-                let falloff = 1.0 - (distance_sq / radius_sq);
-                let blur_strength = (self.brush_strength * falloff).clamp(0.0, 1.0);
-                let idx = y as usize * BITMAP_SIZE + x as usize;
-                let blurred = blurred_sum / weight_sum;
-                let current = self.heightmap[idx];
-                self.heightmap[idx] = lerp(current, blurred, blur_strength);
+                let flow = self.brush_flow * (1.0 - (distance_sq / radius_sq));
+                let pixel = self.stroke_accumulate_pixel(x as usize, y as usize, flow);
+                let blurred = self.sample_blur_from_stroke_start(x as usize, y as usize);
+                let alpha = (self.brush_opacity * pixel.coverage).clamp(0.0, 1.0);
+                let next = lerp(pixel.base, blurred, alpha);
+                self.apply_stroke_result(x as usize, y as usize, next);
             }
+        }
+    }
+
+    fn sample_blur_from_stroke_start(&mut self, x: usize, y: usize) -> f32 {
+        let mut blurred_sum = 0.0;
+        let mut weight_sum = 0.0;
+
+        for kernel_y in -1..=1 {
+            for kernel_x in -1..=1 {
+                let weight = match (kernel_x, kernel_y) {
+                    (0, 0) => 4.0,
+                    (0, _) | (_, 0) => 2.0,
+                    _ => 1.0,
+                };
+                let sample_x = (x as i32 + kernel_x).clamp(0, BITMAP_SIZE as i32 - 1) as usize;
+                let sample_y = (y as i32 + kernel_y).clamp(0, BITMAP_SIZE as i32 - 1) as usize;
+                blurred_sum += self.stroke_original_value(sample_x, sample_y) * weight;
+                weight_sum += weight;
+            }
+        }
+
+        blurred_sum / weight_sum
+    }
+
+    fn stroke_original_value(&mut self, x: usize, y: usize) -> f32 {
+        self.active_stroke
+            .as_mut()
+            .expect("active stroke should exist")
+            .original_value(&self.heightmap, x, y)
+    }
+
+    fn stroke_accumulate_pixel(&mut self, x: usize, y: usize, flow: f32) -> StrokePixelState {
+        self.active_stroke
+            .as_mut()
+            .expect("active stroke should exist")
+            .accumulate(&self.heightmap, x, y, flow.clamp(0.0, 1.0))
+    }
+
+    fn apply_stroke_result(&mut self, x: usize, y: usize, next: f32) {
+        let idx = y * BITMAP_SIZE + x;
+        let previous = self.heightmap[idx];
+        if (next - previous).abs() <= f32::EPSILON {
+            return;
+        }
+
+        self.heightmap[idx] = next;
+        if let Some(session) = &mut self.active_stroke {
+            session.mark_changed();
         }
     }
 }
