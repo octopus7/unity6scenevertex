@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.IO;
 using System.Linq;
 using UnityEditor;
 using UnityEditor.SceneManagement;
@@ -43,6 +44,8 @@ public sealed class SceneVertexBundleAnalysisWindow : EditorWindow
     [SerializeField] private string analyzedSceneName = string.Empty;
     [SerializeField] private string analyzedScenePath = string.Empty;
     [SerializeField] private string analyzedSceneBundleName = string.Empty;
+    [SerializeField] private string analyzedSceneBundleFilePath = string.Empty;
+    [SerializeField] private long analyzedSceneBundleSizeBytes;
     [SerializeField] private int totalMeshObjectCount;
     [SerializeField] private int totalUniqueMeshCount;
     [SerializeField] private long totalVertexInstances;
@@ -98,6 +101,8 @@ public sealed class SceneVertexBundleAnalysisWindow : EditorWindow
             EditorGUILayout.LabelField("Scene", string.IsNullOrEmpty(analyzedSceneName) ? "(none)" : analyzedSceneName);
             EditorGUILayout.LabelField("Scene Path", string.IsNullOrEmpty(analyzedScenePath) ? "(none)" : analyzedScenePath);
             EditorGUILayout.LabelField("Scene Bundle", string.IsNullOrEmpty(analyzedSceneBundleName) ? "(unassigned)" : analyzedSceneBundleName);
+            EditorGUILayout.LabelField("Scene Bundle Size", GetSceneBundleSizeLabel());
+            EditorGUILayout.LabelField("Bundle Output", string.IsNullOrEmpty(analyzedSceneBundleFilePath) ? "(not built for current target)" : analyzedSceneBundleFilePath);
             EditorGUILayout.LabelField("Mesh Objects", totalMeshObjectCount.ToString("N0"));
             EditorGUILayout.LabelField("Unique Meshes", totalUniqueMeshCount.ToString("N0"));
             EditorGUILayout.LabelField("Vertex Instances", totalVertexInstances.ToString("N0"));
@@ -165,6 +170,8 @@ public sealed class SceneVertexBundleAnalysisWindow : EditorWindow
         analyzedSceneName = scene.name;
         analyzedScenePath = scene.path;
         analyzedSceneBundleName = GetAssetBundleName(scene.path);
+        analyzedSceneBundleFilePath = GetBundleFilePath(analyzedSceneBundleName);
+        analyzedSceneBundleSizeBytes = GetBundleFileSize(analyzedSceneBundleFilePath);
 
         totalMeshObjectCount = 0;
         totalVertexInstances = 0;
@@ -434,6 +441,8 @@ public sealed class SceneVertexBundleAnalysisWindow : EditorWindow
         analyzedSceneName = string.Empty;
         analyzedScenePath = string.Empty;
         analyzedSceneBundleName = string.Empty;
+        analyzedSceneBundleFilePath = string.Empty;
+        analyzedSceneBundleSizeBytes = 0;
         totalMeshObjectCount = 0;
         totalUniqueMeshCount = 0;
         totalVertexInstances = 0;
@@ -449,5 +458,66 @@ public sealed class SceneVertexBundleAnalysisWindow : EditorWindow
     {
         categorySummaries ??= new List<CategorySummary>();
         usageEntries ??= new List<MeshUsageEntry>();
+    }
+
+    private string GetSceneBundleSizeLabel()
+    {
+        if (string.IsNullOrEmpty(analyzedSceneBundleName))
+        {
+            return "(unassigned)";
+        }
+
+        if (string.IsNullOrEmpty(analyzedSceneBundleFilePath) || analyzedSceneBundleSizeBytes <= 0)
+        {
+            return "(not built for current target)";
+        }
+
+        return FormatSize(analyzedSceneBundleSizeBytes);
+    }
+
+    private static string GetBundleFilePath(string bundleName)
+    {
+        if (string.IsNullOrEmpty(bundleName))
+        {
+            return string.Empty;
+        }
+
+        var outputFolder = Path.Combine(
+            Directory.GetCurrentDirectory(),
+            "AssetBundleBuilds",
+            EditorUserBuildSettings.activeBuildTarget.ToString());
+        var bundleFilePath = Path.Combine(outputFolder, bundleName);
+        return File.Exists(bundleFilePath) ? bundleFilePath : string.Empty;
+    }
+
+    private static long GetBundleFileSize(string bundleFilePath)
+    {
+        return string.IsNullOrEmpty(bundleFilePath) || !File.Exists(bundleFilePath)
+            ? 0L
+            : new FileInfo(bundleFilePath).Length;
+    }
+
+    private static string FormatSize(long sizeBytes)
+    {
+        const double kilo = 1024d;
+        const double mega = kilo * 1024d;
+        const double giga = mega * 1024d;
+
+        if (sizeBytes >= giga)
+        {
+            return $"{sizeBytes / giga:0.00} GB";
+        }
+
+        if (sizeBytes >= mega)
+        {
+            return $"{sizeBytes / mega:0.00} MB";
+        }
+
+        if (sizeBytes >= kilo)
+        {
+            return $"{sizeBytes / kilo:0.00} KB";
+        }
+
+        return $"{sizeBytes} B";
     }
 }
