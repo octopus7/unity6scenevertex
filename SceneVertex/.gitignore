@@ -1,0 +1,47 @@
+# Unity generated folders
+[Ll]ibrary/
+[Tt]emp/
+[Oo]bj/
+[Ll]ogs/
+UserSettings/
+[Mm]emoryCaptures/
+Build/
+Builds/
+
+# Visual Studio / Rider / VS Code generated files
+.vs/
+.idea/
+.vscode/
+.consulo/
+*.csproj
+*.unityproj
+*.sln
+*.suo
+*.tmp
+*.user
+*.userprefs
+*.pidb
+*.booproj
+*.svd
+*.pdb
+*.mdb
+*.opendb
+*.VC.db
+
+# Unity generated metadata for IDE files
+*.pidb.meta
+*.pdb.meta
+*.mdb.meta
+
+# Crash reports
+sysinfo.txt
+
+# Build artifacts
+*.apk
+*.aab
+*.app
+*.unitypackage
+
+# OS files
+.DS_Store
+Thumbs.db
