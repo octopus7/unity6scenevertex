@@ -14,25 +14,19 @@ public sealed class ProceduralNatureLayoutWindow : EditorWindow
         GardenLayout
     }
 
-    private enum PropKind
-    {
-        Tree,
-        Rock,
-        Fence,
-        Flower
-    }
-
     private readonly struct PlacementRequest
     {
-        public PlacementRequest(PropKind kind, Vector2 position, float yawDegrees, float uniformScale)
+        public PlacementRequest(ProceduralNaturePropCategory kind, int variantIndex, Vector2 position, float yawDegrees, float uniformScale)
         {
             Kind = kind;
+            VariantIndex = variantIndex;
             Position = position;
             YawDegrees = yawDegrees;
             UniformScale = uniformScale;
         }
 
-        public PropKind Kind { get; }
+        public ProceduralNaturePropCategory Kind { get; }
+        public int VariantIndex { get; }
         public Vector2 Position { get; }
         public float YawDegrees { get; }
         public float UniformScale { get; }
@@ -50,9 +44,26 @@ public sealed class ProceduralNatureLayoutWindow : EditorWindow
         public float Radius { get; }
     }
 
+    private readonly struct PlacementAnchor
+    {
+        public PlacementAnchor(Vector2 position, float yawDegrees)
+        {
+            Position = position;
+            YawDegrees = yawDegrees;
+        }
+
+        public Vector2 Position { get; }
+        public float YawDegrees { get; }
+    }
+
+    private sealed class RequiredAssets
+    {
+        public Dictionary<ProceduralNaturePropCategory, List<Mesh>> Meshes { get; } = new();
+        public Material SharedMaterial { get; set; }
+    }
+
     private const string GroundName = "SceneVertex_Ground100m";
     private const string LayoutRootName = "SceneVertex_AutoLayout";
-    private const string MeshFolder = "Assets/GeneratedMeshes";
     private const float GroundSize = 100f;
     private const float HalfGroundSize = GroundSize * 0.5f;
 
@@ -61,17 +72,17 @@ public sealed class ProceduralNatureLayoutWindow : EditorWindow
     [SerializeField] private int rockCount = 8;
     [SerializeField] private int fenceCount = 12;
     [SerializeField] private int flowerCount = 28;
+    [SerializeField] private int bushCount = 12;
+    [SerializeField] private int mushroomCount = 16;
     [SerializeField] private int seed = 12345;
     [SerializeField] private bool replacePreviousLayout = true;
     [SerializeField] private bool generateMissingAssets = true;
-
-    private static Material cachedDefaultMaterial;
 
     [MenuItem("Tools/SceneVertex/Layout Window")]
     public static void OpenWindow()
     {
         var window = GetWindow<ProceduralNatureLayoutWindow>("SceneVertex Layout");
-        window.minSize = new Vector2(340f, 360f);
+        window.minSize = new Vector2(360f, 430f);
     }
 
     private void OnGUI()
@@ -84,7 +95,7 @@ public sealed class ProceduralNatureLayoutWindow : EditorWindow
             pattern = (PlacementPattern)EditorGUILayout.EnumPopup("Pattern", pattern);
             seed = EditorGUILayout.IntField("Seed", seed);
             replacePreviousLayout = EditorGUILayout.ToggleLeft("Replace previous auto layout", replacePreviousLayout);
-            generateMissingAssets = EditorGUILayout.ToggleLeft("Generate missing mesh assets", generateMissingAssets);
+            generateMissingAssets = EditorGUILayout.ToggleLeft("Generate missing procedural assets", generateMissingAssets);
         }
 
         using (new EditorGUILayout.VerticalScope("box"))
@@ -94,10 +105,11 @@ public sealed class ProceduralNatureLayoutWindow : EditorWindow
             rockCount = Mathf.Max(0, EditorGUILayout.IntField("Rocks", rockCount));
             fenceCount = Mathf.Max(0, EditorGUILayout.IntField("Fences", fenceCount));
             flowerCount = Mathf.Max(0, EditorGUILayout.IntField("Flowers", flowerCount));
+            bushCount = Mathf.Max(0, EditorGUILayout.IntField("Bushes", bushCount));
+            mushroomCount = Mathf.Max(0, EditorGUILayout.IntField("Mushrooms", mushroomCount));
         }
 
         GUILayout.Space(6f);
-
         if (GUILayout.Button("Build Layout In Active Scene", GUILayout.Height(34f)))
         {
             BuildLayoutInActiveScene();
@@ -108,19 +120,19 @@ public sealed class ProceduralNatureLayoutWindow : EditorWindow
             EnsureGroundInActiveScene();
         }
 
-        if (GUILayout.Button("Generate Mesh Assets"))
+        if (GUILayout.Button("Generate Procedural Assets"))
         {
             ProceduralNatureMeshAssetGenerator.GenerateAssets();
         }
 
         if (GUILayout.Button("Clear Placed Objects"))
         {
-            ClearAutoLayoutInActiveScene(false);
+            ClearGeneratedObjectsInActiveScene(false);
         }
 
         if (GUILayout.Button("Clear Placed Objects + Ground"))
         {
-            ClearAutoLayoutInActiveScene(true);
+            ClearGeneratedObjectsInActiveScene(true);
         }
     }
 
@@ -149,11 +161,6 @@ public sealed class ProceduralNatureLayoutWindow : EditorWindow
         ClearGeneratedObjectsInActiveScene(true);
     }
 
-    private void ClearAutoLayoutInActiveScene(bool removeGroundToo)
-    {
-        ClearGeneratedObjectsInActiveScene(removeGroundToo);
-    }
-
     private static void ClearGeneratedObjectsInActiveScene(bool removeGroundToo)
     {
         var scene = EditorSceneManager.GetActiveScene();
@@ -162,18 +169,8 @@ public sealed class ProceduralNatureLayoutWindow : EditorWindow
             return;
         }
 
-        var root = FindMarkedObject(scene, SceneVertexGeneratedObjectKind.LayoutRoot);
-        if (root == null)
-        {
-            root = FindNamedObject(scene, LayoutRootName);
-        }
-
-        var ground = FindMarkedObject(scene, SceneVertexGeneratedObjectKind.GroundPlane);
-        if (ground == null)
-        {
-            ground = FindNamedObject(scene, GroundName);
-        }
-
+        var root = FindMarkedObject(scene, SceneVertexGeneratedObjectKind.LayoutRoot) ?? FindNamedObject(scene, LayoutRootName);
+        var ground = FindMarkedObject(scene, SceneVertexGeneratedObjectKind.GroundPlane) ?? FindNamedObject(scene, GroundName);
         if (root == null && (!removeGroundToo || ground == null))
         {
             return;
@@ -212,15 +209,14 @@ public sealed class ProceduralNatureLayoutWindow : EditorWindow
             return;
         }
 
-        var meshes = LoadRequiredMeshes(generateMissingAssets);
-        if (meshes == null)
+        var assets = LoadRequiredAssets(generateMissingAssets);
+        if (assets == null)
         {
             return;
         }
 
         Undo.SetCurrentGroupName("Build SceneVertex Layout");
         var undoGroup = Undo.GetCurrentGroup();
-
         EnsureGroundPlane(scene);
         var layoutRoot = GetOrCreateLayoutRoot(scene);
         if (replacePreviousLayout)
@@ -233,56 +229,60 @@ public sealed class ProceduralNatureLayoutWindow : EditorWindow
         container.transform.SetParent(layoutRoot.transform, false);
 
         var requests = BuildPlacementRequests();
-        InstantiateRequests(container.transform, meshes, requests);
-
+        InstantiateRequests(container.transform, assets, requests);
         Selection.activeGameObject = container;
         EditorSceneManager.MarkSceneDirty(scene);
         Undo.CollapseUndoOperations(undoGroup);
     }
 
-    private Dictionary<PropKind, Mesh> LoadRequiredMeshes(bool allowGenerate)
+    private RequiredAssets LoadRequiredAssets(bool allowGenerate)
     {
-        var meshes = new Dictionary<PropKind, Mesh>();
-        var missing = new List<string>();
+        var assets = new RequiredAssets();
+        var missingMeshes = new List<string>();
+        LoadMeshes(assets.Meshes, missingMeshes);
+        assets.SharedMaterial = AssetDatabase.LoadAssetAtPath<Material>(ProceduralNatureMeshAssetGenerator.SharedMaterialAssetPath);
 
-        LoadMesh(meshes, missing, PropKind.Tree, "Tree");
-        LoadMesh(meshes, missing, PropKind.Rock, "Rock");
-        LoadMesh(meshes, missing, PropKind.Fence, "Fence");
-        LoadMesh(meshes, missing, PropKind.Flower, "Flower");
-
-        if (missing.Count > 0 && allowGenerate)
+        if ((missingMeshes.Count > 0 || assets.SharedMaterial == null) && allowGenerate)
         {
             ProceduralNatureMeshAssetGenerator.GenerateAssets();
-            meshes.Clear();
-            missing.Clear();
-            LoadMesh(meshes, missing, PropKind.Tree, "Tree");
-            LoadMesh(meshes, missing, PropKind.Rock, "Rock");
-            LoadMesh(meshes, missing, PropKind.Fence, "Fence");
-            LoadMesh(meshes, missing, PropKind.Flower, "Flower");
+            assets = new RequiredAssets();
+            missingMeshes.Clear();
+            LoadMeshes(assets.Meshes, missingMeshes);
+            assets.SharedMaterial = AssetDatabase.LoadAssetAtPath<Material>(ProceduralNatureMeshAssetGenerator.SharedMaterialAssetPath);
         }
 
-        if (missing.Count > 0)
+        if (missingMeshes.Count > 0 || assets.SharedMaterial == null)
         {
-            EditorUtility.DisplayDialog(
-                "Missing Mesh Assets",
-                $"These mesh assets are missing in {MeshFolder}: {string.Join(", ", missing)}",
-                "OK");
+            var message = $"Missing mesh assets: {string.Join(", ", missingMeshes)}\nMissing shared material: {assets.SharedMaterial == null}";
+            EditorUtility.DisplayDialog("Missing Procedural Assets", message, "OK");
             return null;
         }
 
-        return meshes;
+        return assets;
     }
 
-    private static void LoadMesh(Dictionary<PropKind, Mesh> meshes, List<string> missing, PropKind kind, string assetName)
+    private static void LoadMeshes(Dictionary<ProceduralNaturePropCategory, List<Mesh>> meshes, List<string> missing)
     {
-        var mesh = AssetDatabase.LoadAssetAtPath<Mesh>($"{MeshFolder}/{assetName}.asset");
-        if (mesh == null)
+        foreach (var category in ProceduralNatureAssetCatalog.GetAllCategories())
         {
-            missing.Add(assetName);
-            return;
-        }
+            var list = new List<Mesh>();
+            foreach (var assetName in ProceduralNatureAssetCatalog.GetMeshAssetNames(category))
+            {
+                var mesh = AssetDatabase.LoadAssetAtPath<Mesh>($"{ProceduralNatureMeshAssetGenerator.MeshOutputFolder}/{assetName}.asset");
+                if (mesh == null)
+                {
+                    missing.Add(assetName);
+                    continue;
+                }
 
-        meshes[kind] = mesh;
+                list.Add(mesh);
+            }
+
+            if (list.Count > 0)
+            {
+                meshes[category] = list;
+            }
+        }
     }
 
     private List<PlacementRequest> BuildPlacementRequests()
@@ -301,34 +301,24 @@ public sealed class ProceduralNatureLayoutWindow : EditorWindow
     {
         var requests = new List<PlacementRequest>();
         var occupied = new List<OccupiedCircle>();
-
         AddRandomFenceRuns(requests, occupied, rng, fenceCount);
-        AddScatter(requests, occupied, rng, PropKind.Tree, treeCount, 3f, candidate => candidate.magnitude > 12f);
-        AddScatter(requests, occupied, rng, PropKind.Rock, rockCount, 2.2f, candidate => candidate.magnitude > 6f);
-        AddClusteredFlowers(requests, occupied, rng, flowerCount, new[]
-        {
-            new Vector2(-10f, 6f),
-            new Vector2(8f, -4f),
-            new Vector2(2f, 10f)
-        }, 5f);
-
+        AddScatter(requests, occupied, rng, ProceduralNaturePropCategory.Tree, treeCount, 4f, candidate => candidate.magnitude > 10f);
+        AddScatter(requests, occupied, rng, ProceduralNaturePropCategory.Rock, rockCount, 3f, candidate => candidate.magnitude > 6f);
+        AddScatter(requests, occupied, rng, ProceduralNaturePropCategory.Bush, bushCount, 2.5f, candidate => candidate.magnitude > 6f && candidate.magnitude < 38f);
+        AddClusteredProps(requests, occupied, rng, ProceduralNaturePropCategory.Flower, flowerCount, new[] { new Vector2(-10f, 8f), new Vector2(8f, -5f), new Vector2(3f, 12f) }, 5.2f);
+        AddClusteredProps(requests, occupied, rng, ProceduralNaturePropCategory.Mushroom, mushroomCount, new[] { new Vector2(-18f, -10f), new Vector2(16f, 8f), new Vector2(0f, -16f) }, 3.6f);
         return requests;
     }
 
     private List<PlacementRequest> BuildNaturalClearing(System.Random rng)
     {
         var requests = new List<PlacementRequest>();
-
-        AddRing(requests, rng, PropKind.Tree, treeCount, 33f, 40f, -10f, 8f, 10f);
-        AddArc(requests, rng, PropKind.Rock, rockCount, 210f, 320f, 22f, 30f, 18f);
+        AddRing(requests, rng, ProceduralNaturePropCategory.Tree, treeCount, 33f, 40f, -10f, 8f, 10f);
+        AddArc(requests, rng, ProceduralNaturePropCategory.Rock, rockCount, 208f, 320f, 22f, 30f, 18f);
+        AddRing(requests, rng, ProceduralNaturePropCategory.Bush, bushCount, 16f, 24f, 22f, 4f, 16f);
         AddFenceEdge(requests, rng, fenceCount, 38f);
-        AddClusteredFlowers(requests, new List<OccupiedCircle>(), rng, flowerCount, new[]
-        {
-            new Vector2(0f, 1f),
-            new Vector2(-6f, -4f),
-            new Vector2(7f, 5f)
-        }, 4.8f);
-
+        AddClusteredPattern(requests, rng, ProceduralNaturePropCategory.Flower, flowerCount, new[] { new Vector2(0f, 1f), new Vector2(-6f, -4f), new Vector2(7f, 5f) }, 4.8f);
+        AddClusteredPattern(requests, rng, ProceduralNaturePropCategory.Mushroom, mushroomCount, new[] { new Vector2(-13f, 14f), new Vector2(12f, 12f), new Vector2(-16f, -6f), new Vector2(15f, -9f) }, 3.2f);
         return requests;
     }
 
@@ -337,16 +327,19 @@ public sealed class ProceduralNatureLayoutWindow : EditorWindow
         var requests = new List<PlacementRequest>();
         AddGardenFenceLoop(requests, rng, fenceCount);
         AddFlowerGrid(requests, rng, flowerCount);
-        AddCornerTrees(requests, rng, treeCount);
-        AddEntranceRocks(requests, rng, rockCount);
+        AddAnchoredProps(requests, rng, ProceduralNaturePropCategory.Tree, treeCount, new[] { new Vector2(-22f, -14f), new Vector2(22f, -14f), new Vector2(-22f, 14f), new Vector2(22f, 14f), new Vector2(0f, 24f), new Vector2(-28f, 0f), new Vector2(28f, 0f) }, 1.6f);
+        AddAnchoredProps(requests, rng, ProceduralNaturePropCategory.Rock, rockCount, new[] { new Vector2(-6f, -16f), new Vector2(6f, -16f), new Vector2(-18f, -2f), new Vector2(18f, -2f), new Vector2(-14f, 13f), new Vector2(14f, 13f) }, 1.2f);
+        AddAnchoredProps(requests, rng, ProceduralNaturePropCategory.Bush, bushCount, new[] { new Vector2(-12f, -9f), new Vector2(12f, -9f), new Vector2(-15f, 8f), new Vector2(15f, 8f), new Vector2(0f, 10f), new Vector2(-7f, 0f), new Vector2(7f, 0f) }, 1.1f);
+        AddClusteredPattern(requests, rng, ProceduralNaturePropCategory.Mushroom, mushroomCount, new[] { new Vector2(-18f, 16f), new Vector2(18f, 16f), new Vector2(-20f, -12f), new Vector2(20f, -12f) }, 2.4f);
         return requests;
     }
 
-    private void InstantiateRequests(Transform parent, Dictionary<PropKind, Mesh> meshes, List<PlacementRequest> requests)
+    private void InstantiateRequests(Transform parent, RequiredAssets assets, List<PlacementRequest> requests)
     {
         foreach (var request in requests)
         {
-            var mesh = meshes[request.Kind];
+            var variants = assets.Meshes[request.Kind];
+            var mesh = variants[Mathf.Clamp(request.VariantIndex, 0, variants.Count - 1)];
             var gameObject = new GameObject($"{request.Kind}_{parent.childCount:000}");
             Undo.RegisterCreatedObjectUndo(gameObject, "Create Procedural Placement");
             gameObject.transform.SetParent(parent, false);
@@ -357,57 +350,20 @@ public sealed class ProceduralNatureLayoutWindow : EditorWindow
             meshFilter.sharedMesh = mesh;
 
             var meshRenderer = gameObject.AddComponent<MeshRenderer>();
-            meshRenderer.sharedMaterial = GetDefaultMaterial();
+            meshRenderer.sharedMaterial = assets.SharedMaterial;
 
             var verticalOffset = -mesh.bounds.min.y * request.UniformScale;
             gameObject.transform.position = new Vector3(request.Position.x, verticalOffset, request.Position.y);
         }
     }
 
-    private static Material GetDefaultMaterial()
-    {
-        if (cachedDefaultMaterial != null)
-        {
-            return cachedDefaultMaterial;
-        }
-
-        cachedDefaultMaterial = AssetDatabase.GetBuiltinExtraResource<Material>("Default-Material.mat");
-        if (cachedDefaultMaterial != null)
-        {
-            return cachedDefaultMaterial;
-        }
-
-        var shader = Shader.Find("Universal Render Pipeline/Lit");
-        if (shader == null)
-        {
-            shader = Shader.Find("Standard");
-        }
-
-        if (shader != null)
-        {
-            cachedDefaultMaterial = new Material(shader)
-            {
-                hideFlags = HideFlags.HideAndDontSave
-            };
-        }
-
-        return cachedDefaultMaterial;
-    }
-
     private static GameObject EnsureGroundPlane(Scene scene)
     {
-        var plane = FindMarkedObject(scene, SceneVertexGeneratedObjectKind.GroundPlane);
-        if (plane == null)
-        {
-            plane = FindNamedObject(scene, GroundName);
-        }
-
+        var plane = FindMarkedObject(scene, SceneVertexGeneratedObjectKind.GroundPlane) ?? FindNamedObject(scene, GroundName);
         if (plane == null)
         {
             plane = GameObject.CreatePrimitive(PrimitiveType.Plane);
             Undo.RegisterCreatedObjectUndo(plane, "Create 100m Ground Plane");
-            plane.name = GroundName;
-            plane.transform.position = Vector3.zero;
         }
 
         plane.name = GroundName;
@@ -427,12 +383,7 @@ public sealed class ProceduralNatureLayoutWindow : EditorWindow
 
     private static GameObject GetOrCreateLayoutRoot(Scene scene)
     {
-        var root = FindMarkedObject(scene, SceneVertexGeneratedObjectKind.LayoutRoot);
-        if (root == null)
-        {
-            root = FindNamedObject(scene, LayoutRootName);
-        }
-
+        var root = FindMarkedObject(scene, SceneVertexGeneratedObjectKind.LayoutRoot) ?? FindNamedObject(scene, LayoutRootName);
         if (root == null)
         {
             root = new GameObject(LayoutRootName);
@@ -467,12 +418,7 @@ public sealed class ProceduralNatureLayoutWindow : EditorWindow
         var markers = UnityEngine.Object.FindObjectsByType<SceneVertexGeneratedObjectMarker>(FindObjectsSortMode.None);
         foreach (var marker in markers)
         {
-            if (marker == null || marker.gameObject.scene != scene)
-            {
-                continue;
-            }
-
-            if (marker.kind == kind)
+            if (marker != null && marker.gameObject.scene == scene && marker.kind == kind)
             {
                 return marker.gameObject;
             }
@@ -494,14 +440,7 @@ public sealed class ProceduralNatureLayoutWindow : EditorWindow
         return null;
     }
 
-    private void AddScatter(
-        List<PlacementRequest> requests,
-        List<OccupiedCircle> occupied,
-        System.Random rng,
-        PropKind kind,
-        int count,
-        float margin,
-        Predicate<Vector2> predicate)
+    private void AddScatter(List<PlacementRequest> requests, List<OccupiedCircle> occupied, System.Random rng, ProceduralNaturePropCategory kind, int count, float margin, Predicate<Vector2> predicate)
     {
         for (var i = 0; i < count; i++)
         {
@@ -513,48 +452,46 @@ public sealed class ProceduralNatureLayoutWindow : EditorWindow
             }
 
             occupied.Add(new OccupiedCircle(point, radius));
-            requests.Add(new PlacementRequest(kind, point, NextYaw(rng, kind), scale));
+            requests.Add(CreateRequest(rng, kind, point, NextYaw(rng, kind), scale));
         }
     }
 
-    private void AddClusteredFlowers(
-        List<PlacementRequest> requests,
-        List<OccupiedCircle> occupied,
-        System.Random rng,
-        int count,
-        IReadOnlyList<Vector2> clusterCenters,
-        float clusterRadius)
+    private void AddClusteredProps(List<PlacementRequest> requests, List<OccupiedCircle> occupied, System.Random rng, ProceduralNaturePropCategory kind, int count, IReadOnlyList<Vector2> centers, float clusterRadius)
     {
         for (var i = 0; i < count; i++)
         {
-            var center = clusterCenters[i % clusterCenters.Count];
-            var scale = NextScale(rng, PropKind.Flower);
-            var radius = GetFootprintRadius(PropKind.Flower, scale);
+            var center = centers[i % centers.Count];
+            var scale = NextScale(rng, kind);
+            var radius = GetFootprintRadius(kind, scale);
             var placed = false;
 
             for (var attempt = 0; attempt < 50; attempt++)
             {
                 var candidate = center + RandomInsideCircle(rng, clusterRadius);
-                if (!IsInsideBounds(candidate, 3f))
-                {
-                    continue;
-                }
-
-                if (IntersectsOccupied(candidate, radius, occupied))
+                if (!IsInsideBounds(candidate, 3f) || IntersectsOccupied(candidate, radius, occupied))
                 {
                     continue;
                 }
 
                 occupied.Add(new OccupiedCircle(candidate, radius));
-                requests.Add(new PlacementRequest(PropKind.Flower, candidate, NextYaw(rng, PropKind.Flower), scale));
+                requests.Add(CreateRequest(rng, kind, candidate, NextYaw(rng, kind), scale));
                 placed = true;
                 break;
             }
 
             if (!placed)
             {
-                AddScatter(requests, occupied, rng, PropKind.Flower, 1, 2f, _ => true);
+                AddScatter(requests, occupied, rng, kind, 1, 2f, _ => true);
             }
+        }
+    }
+
+    private void AddClusteredPattern(List<PlacementRequest> requests, System.Random rng, ProceduralNaturePropCategory kind, int count, IReadOnlyList<Vector2> centers, float clusterRadius)
+    {
+        for (var i = 0; i < count; i++)
+        {
+            var position = centers[i % centers.Count] + RandomInsideCircle(rng, clusterRadius);
+            requests.Add(CreateRequest(rng, kind, position, NextYaw(rng, kind), NextScale(rng, kind)));
         }
     }
 
@@ -594,9 +531,9 @@ public sealed class ProceduralNatureLayoutWindow : EditorWindow
 
             for (var index = 0; index < runLength; index++)
             {
-                var scale = NextScale(rng, PropKind.Fence);
+                var scale = NextScale(rng, ProceduralNaturePropCategory.Fence);
                 var position = first + direction * (spacing * index);
-                var radius = GetFootprintRadius(PropKind.Fence, scale);
+                var radius = GetFootprintRadius(ProceduralNaturePropCategory.Fence, scale);
                 if (!IsInsideBounds(position, 4f) || IntersectsOccupied(position, radius, occupied))
                 {
                     valid = false;
@@ -604,7 +541,7 @@ public sealed class ProceduralNatureLayoutWindow : EditorWindow
                 }
 
                 circles.Add(new OccupiedCircle(position, radius));
-                placements.Add(new PlacementRequest(PropKind.Fence, position, yaw, scale));
+                placements.Add(CreateRequest(rng, ProceduralNaturePropCategory.Fence, position, yaw, scale));
             }
 
             if (!valid)
@@ -620,38 +557,19 @@ public sealed class ProceduralNatureLayoutWindow : EditorWindow
         return false;
     }
 
-    private void AddRing(
-        List<PlacementRequest> requests,
-        System.Random rng,
-        PropKind kind,
-        int count,
-        float minRadius,
-        float maxRadius,
-        float angleOffset,
-        float radiusJitter,
-        float angleJitter)
+    private void AddRing(List<PlacementRequest> requests, System.Random rng, ProceduralNaturePropCategory kind, int count, float minRadius, float maxRadius, float angleOffset, float radiusJitter, float angleJitter)
     {
         for (var i = 0; i < count; i++)
         {
-            var t = count == 0 ? 0f : (float)i / Mathf.Max(1, count);
+            var t = count <= 1 ? 0.5f : (float)i / count;
             var angle = angleOffset + t * 360f + NextRange(rng, -angleJitter, angleJitter);
-            var radius = Mathf.Clamp(Mathf.Lerp(minRadius, maxRadius, (float)rng.NextDouble()) + NextRange(rng, -radiusJitter, radiusJitter), minRadius, maxRadius);
-            var direction = DirectionFromYaw(angle);
-            var scale = NextScale(rng, kind);
-            requests.Add(new PlacementRequest(kind, direction * radius, angle + 180f + NextRange(rng, -20f, 20f), scale));
+            var radius = Mathf.Clamp(NextRange(rng, minRadius, maxRadius) + NextRange(rng, -radiusJitter, radiusJitter), minRadius, maxRadius);
+            var position = DirectionFromYaw(angle) * radius;
+            requests.Add(CreateRequest(rng, kind, position, angle + 180f + NextRange(rng, -20f, 20f), NextScale(rng, kind)));
         }
     }
 
-    private void AddArc(
-        List<PlacementRequest> requests,
-        System.Random rng,
-        PropKind kind,
-        int count,
-        float startAngle,
-        float endAngle,
-        float minRadius,
-        float maxRadius,
-        float yawBias)
+    private void AddArc(List<PlacementRequest> requests, System.Random rng, ProceduralNaturePropCategory kind, int count, float startAngle, float endAngle, float minRadius, float maxRadius, float yawBias)
     {
         for (var i = 0; i < count; i++)
         {
@@ -659,8 +577,7 @@ public sealed class ProceduralNatureLayoutWindow : EditorWindow
             var angle = Mathf.Lerp(startAngle, endAngle, t) + NextRange(rng, -8f, 8f);
             var radius = NextRange(rng, minRadius, maxRadius);
             var position = DirectionFromYaw(angle) * radius;
-            var scale = NextScale(rng, kind);
-            requests.Add(new PlacementRequest(kind, position, angle + yawBias + NextRange(rng, -25f, 25f), scale));
+            requests.Add(CreateRequest(rng, kind, position, angle + yawBias + NextRange(rng, -25f, 25f), NextScale(rng, kind)));
         }
     }
 
@@ -671,18 +588,15 @@ public sealed class ProceduralNatureLayoutWindow : EditorWindow
         var startX = -((sideCount - 1) * spacing) * 0.5f;
         for (var i = 0; i < sideCount; i++)
         {
-            var x = startX + i * spacing;
-            var position = new Vector2(x, zPosition + NextRange(rng, -0.4f, 0.4f));
-            var yaw = 0f + NextRange(rng, -4f, 4f);
-            requests.Add(new PlacementRequest(PropKind.Fence, position, yaw, NextScale(rng, PropKind.Fence)));
+            var position = new Vector2(startX + i * spacing, zPosition + NextRange(rng, -0.4f, 0.4f));
+            requests.Add(CreateRequest(rng, ProceduralNaturePropCategory.Fence, position, NextRange(rng, -4f, 4f), NextScale(rng, ProceduralNaturePropCategory.Fence)));
         }
 
         for (var i = sideCount; i < count; i++)
         {
             var z = zPosition - 3.1f * (i - sideCount + 1);
             var position = new Vector2(-35f + NextRange(rng, -0.4f, 0.4f), z);
-            var yaw = 90f + NextRange(rng, -4f, 4f);
-            requests.Add(new PlacementRequest(PropKind.Fence, position, yaw, NextScale(rng, PropKind.Fence)));
+            requests.Add(CreateRequest(rng, ProceduralNaturePropCategory.Fence, position, 90f + NextRange(rng, -4f, 4f), NextScale(rng, ProceduralNaturePropCategory.Fence)));
         }
     }
 
@@ -692,7 +606,7 @@ public sealed class ProceduralNatureLayoutWindow : EditorWindow
         var selected = SampleEvenly(candidates, count);
         foreach (var candidate in selected)
         {
-            requests.Add(new PlacementRequest(PropKind.Fence, candidate.Position, candidate.YawDegrees + NextRange(rng, -2f, 2f), NextScale(rng, PropKind.Fence)));
+            requests.Add(CreateRequest(rng, ProceduralNaturePropCategory.Fence, candidate.Position, candidate.YawDegrees, NextScale(rng, ProceduralNaturePropCategory.Fence)));
         }
     }
 
@@ -703,9 +617,8 @@ public sealed class ProceduralNatureLayoutWindow : EditorWindow
             return;
         }
 
-        var columns = Mathf.Max(1, Mathf.CeilToInt(Mathf.Sqrt(count * 1.6f)));
+        var columns = Mathf.Max(1, Mathf.CeilToInt(Mathf.Sqrt(count * 1.5f)));
         var rows = Mathf.CeilToInt((float)count / columns);
-
         for (var i = 0; i < count; i++)
         {
             var column = i % columns;
@@ -713,83 +626,50 @@ public sealed class ProceduralNatureLayoutWindow : EditorWindow
             var x = columns == 1 ? 0f : Mathf.Lerp(-10f, 10f, (float)column / (columns - 1));
             var z = rows == 1 ? 0f : Mathf.Lerp(-6f, 6f, (float)row / (rows - 1));
             var position = new Vector2(x, z) + new Vector2(NextRange(rng, -0.4f, 0.4f), NextRange(rng, -0.4f, 0.4f));
-            requests.Add(new PlacementRequest(PropKind.Flower, position, NextYaw(rng, PropKind.Flower), NextScale(rng, PropKind.Flower)));
+            requests.Add(CreateRequest(rng, ProceduralNaturePropCategory.Flower, position, NextYaw(rng, ProceduralNaturePropCategory.Flower), NextScale(rng, ProceduralNaturePropCategory.Flower)));
         }
     }
 
-    private void AddCornerTrees(List<PlacementRequest> requests, System.Random rng, int count)
+    private void AddAnchoredProps(List<PlacementRequest> requests, System.Random rng, ProceduralNaturePropCategory kind, int count, IReadOnlyList<Vector2> anchors, float jitter)
     {
-        var anchors = new[]
-        {
-            new Vector2(-21f, -14f),
-            new Vector2(21f, -14f),
-            new Vector2(-21f, 14f),
-            new Vector2(21f, 14f),
-            new Vector2(-28f, 0f),
-            new Vector2(28f, 0f),
-            new Vector2(0f, 22f),
-            new Vector2(0f, -22f)
-        };
-
         for (var i = 0; i < count; i++)
         {
-            var anchor = anchors[i % anchors.Length];
-            var position = anchor + new Vector2(NextRange(rng, -1.4f, 1.4f), NextRange(rng, -1.4f, 1.4f));
-            requests.Add(new PlacementRequest(PropKind.Tree, position, NextYaw(rng, PropKind.Tree), NextScale(rng, PropKind.Tree)));
+            var anchor = anchors[i % anchors.Count];
+            var position = anchor + new Vector2(NextRange(rng, -jitter, jitter), NextRange(rng, -jitter, jitter));
+            requests.Add(CreateRequest(rng, kind, position, NextYaw(rng, kind), NextScale(rng, kind)));
         }
     }
 
-    private void AddEntranceRocks(List<PlacementRequest> requests, System.Random rng, int count)
-    {
-        var anchors = new[]
-        {
-            new Vector2(-5f, -15f),
-            new Vector2(5f, -15f),
-            new Vector2(-17f, -2f),
-            new Vector2(17f, -2f),
-            new Vector2(-14f, 13f),
-            new Vector2(14f, 13f)
-        };
-
-        for (var i = 0; i < count; i++)
-        {
-            var anchor = anchors[i % anchors.Length];
-            var position = anchor + new Vector2(NextRange(rng, -1.2f, 1.2f), NextRange(rng, -1.2f, 1.2f));
-            requests.Add(new PlacementRequest(PropKind.Rock, position, NextYaw(rng, PropKind.Rock), NextScale(rng, PropKind.Rock)));
-        }
-    }
-
-    private static List<PlacementRequest> BuildGardenFenceCandidates()
+    private static List<PlacementAnchor> BuildGardenFenceCandidates()
     {
         const float halfWidth = 17f;
         const float halfHeight = 11f;
         const float spacing = 3.1f;
         const float gateHalfWidth = 4.5f;
-
-        var candidates = new List<PlacementRequest>();
+        var result = new List<PlacementAnchor>();
 
         for (var x = -halfWidth; x <= halfWidth + 0.01f; x += spacing)
         {
             if (Mathf.Abs(x) > gateHalfWidth)
             {
-                candidates.Add(new PlacementRequest(PropKind.Fence, new Vector2(x, -halfHeight), 0f, 1f));
+                result.Add(new PlacementAnchor(new Vector2(x, -halfHeight), 0f));
             }
 
-            candidates.Add(new PlacementRequest(PropKind.Fence, new Vector2(x, halfHeight), 0f, 1f));
+            result.Add(new PlacementAnchor(new Vector2(x, halfHeight), 0f));
         }
 
         for (var z = -halfHeight + spacing; z <= halfHeight - spacing + 0.01f; z += spacing)
         {
-            candidates.Add(new PlacementRequest(PropKind.Fence, new Vector2(-halfWidth, z), 90f, 1f));
-            candidates.Add(new PlacementRequest(PropKind.Fence, new Vector2(halfWidth, z), 90f, 1f));
+            result.Add(new PlacementAnchor(new Vector2(-halfWidth, z), 90f));
+            result.Add(new PlacementAnchor(new Vector2(halfWidth, z), 90f));
         }
 
-        return candidates;
+        return result;
     }
 
-    private static List<PlacementRequest> SampleEvenly(List<PlacementRequest> source, int count)
+    private static List<PlacementAnchor> SampleEvenly(List<PlacementAnchor> source, int count)
     {
-        var result = new List<PlacementRequest>();
+        var result = new List<PlacementAnchor>();
         if (count <= 0 || source.Count == 0)
         {
             return result;
@@ -804,27 +684,17 @@ public sealed class ProceduralNatureLayoutWindow : EditorWindow
         var step = (source.Count - 1f) / Mathf.Max(1, count - 1);
         for (var i = 0; i < count; i++)
         {
-            var index = Mathf.RoundToInt(step * i);
-            result.Add(source[index]);
+            result.Add(source[Mathf.RoundToInt(step * i)]);
         }
 
         return result;
     }
 
-    private static bool TryFindPoint(
-        System.Random rng,
-        List<OccupiedCircle> occupied,
-        float radius,
-        float edgeMargin,
-        Predicate<Vector2> predicate,
-        out Vector2 point)
+    private static bool TryFindPoint(System.Random rng, List<OccupiedCircle> occupied, float radius, float edgeMargin, Predicate<Vector2> predicate, out Vector2 point)
     {
         for (var attempt = 0; attempt < 150; attempt++)
         {
-            var candidate = new Vector2(
-                NextRange(rng, -HalfGroundSize + edgeMargin, HalfGroundSize - edgeMargin),
-                NextRange(rng, -HalfGroundSize + edgeMargin, HalfGroundSize - edgeMargin));
-
+            var candidate = new Vector2(NextRange(rng, -HalfGroundSize + edgeMargin, HalfGroundSize - edgeMargin), NextRange(rng, -HalfGroundSize + edgeMargin, HalfGroundSize - edgeMargin));
             if (predicate != null && !predicate(candidate))
             {
                 continue;
@@ -859,17 +729,13 @@ public sealed class ProceduralNatureLayoutWindow : EditorWindow
 
     private static bool IsInsideBounds(Vector2 point, float margin)
     {
-        return point.x >= -HalfGroundSize + margin &&
-               point.x <= HalfGroundSize - margin &&
-               point.y >= -HalfGroundSize + margin &&
-               point.y <= HalfGroundSize - margin;
+        return point.x >= -HalfGroundSize + margin && point.x <= HalfGroundSize - margin && point.y >= -HalfGroundSize + margin && point.y <= HalfGroundSize - margin;
     }
 
     private static Vector2 RandomInsideCircle(System.Random rng, float radius)
     {
         var angle = NextRange(rng, 0f, Mathf.PI * 2f);
-        var distance = radius * Mathf.Sqrt((float)rng.NextDouble());
-        return new Vector2(Mathf.Cos(angle), Mathf.Sin(angle)) * distance;
+        return new Vector2(Mathf.Cos(angle), Mathf.Sin(angle)) * (radius * Mathf.Sqrt((float)rng.NextDouble()));
     }
 
     private static Vector2 DirectionFromYaw(float yawDegrees)
@@ -878,35 +744,40 @@ public sealed class ProceduralNatureLayoutWindow : EditorWindow
         return new Vector2(Mathf.Sin(radians), Mathf.Cos(radians));
     }
 
-    private static float NextScale(System.Random rng, PropKind kind)
+    private static PlacementRequest CreateRequest(System.Random rng, ProceduralNaturePropCategory kind, Vector2 position, float yawDegrees, float uniformScale)
+    {
+        return new PlacementRequest(kind, rng.Next(ProceduralNatureAssetCatalog.GetVariantCount(kind)), position, yawDegrees, uniformScale);
+    }
+
+    private static float NextScale(System.Random rng, ProceduralNaturePropCategory kind)
     {
         return kind switch
         {
-            PropKind.Tree => NextRange(rng, 0.9f, 1.25f),
-            PropKind.Rock => NextRange(rng, 0.8f, 1.35f),
-            PropKind.Fence => NextRange(rng, 0.96f, 1.05f),
-            PropKind.Flower => NextRange(rng, 0.85f, 1.18f),
+            ProceduralNaturePropCategory.Tree => NextRange(rng, 0.90f, 1.25f),
+            ProceduralNaturePropCategory.Rock => NextRange(rng, 0.80f, 1.35f),
+            ProceduralNaturePropCategory.Fence => NextRange(rng, 0.96f, 1.05f),
+            ProceduralNaturePropCategory.Flower => NextRange(rng, 0.85f, 1.18f),
+            ProceduralNaturePropCategory.Bush => NextRange(rng, 0.90f, 1.20f),
+            ProceduralNaturePropCategory.Mushroom => NextRange(rng, 0.80f, 1.15f),
             _ => 1f
         };
     }
 
-    private static float NextYaw(System.Random rng, PropKind kind)
+    private static float NextYaw(System.Random rng, ProceduralNaturePropCategory kind)
     {
-        return kind switch
-        {
-            PropKind.Fence => 90f * rng.Next(0, 4),
-            _ => NextRange(rng, 0f, 360f)
-        };
+        return kind == ProceduralNaturePropCategory.Fence ? 90f * rng.Next(0, 4) : NextRange(rng, 0f, 360f);
     }
 
-    private static float GetFootprintRadius(PropKind kind, float scale)
+    private static float GetFootprintRadius(ProceduralNaturePropCategory kind, float scale)
     {
         var baseRadius = kind switch
         {
-            PropKind.Tree => 2.4f,
-            PropKind.Rock => 1.8f,
-            PropKind.Fence => 1.7f,
-            PropKind.Flower => 0.55f,
+            ProceduralNaturePropCategory.Tree => 2.5f,
+            ProceduralNaturePropCategory.Rock => 1.9f,
+            ProceduralNaturePropCategory.Fence => 1.7f,
+            ProceduralNaturePropCategory.Flower => 0.55f,
+            ProceduralNaturePropCategory.Bush => 1.9f,
+            ProceduralNaturePropCategory.Mushroom => 0.75f,
             _ => 1f
         };
 
@@ -922,9 +793,9 @@ public sealed class ProceduralNatureLayoutWindow : EditorWindow
     {
         return value switch
         {
-            PlacementPattern.RandomScatter => "랜덤 산포: 전체 영역에 흩뿌리되, 꽃은 군집으로 묶고 울타리는 짧은 줄 형태로 배치합니다.",
-            PlacementPattern.NaturalClearing => "자연 공터: 나무를 바깥 고리로 두고, 바위는 한쪽 호 형태, 꽃은 중앙 군집, 울타리는 가장자리 라인으로 배치합니다.",
-            PlacementPattern.GardenLayout => "정원형 배치: 울타리 테두리와 입구, 내부 꽃 격자, 코너 나무와 입구 주변 바위로 정돈된 구조를 만듭니다.",
+            PlacementPattern.RandomScatter => "Scatter everything across the plane, but keep flowers and mushrooms in clusters and fences in short runs.",
+            PlacementPattern.NaturalClearing => "Trees form an outer ring, rocks sit in an arc, bushes fill the mid band, and small plants cluster in the clearing.",
+            PlacementPattern.GardenLayout => "A fenced garden with flower beds, corner trees, trimmed bushes, and accent props around the edges.",
             _ => string.Empty
         };
     }

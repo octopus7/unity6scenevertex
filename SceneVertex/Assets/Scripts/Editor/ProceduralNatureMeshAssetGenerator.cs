@@ -1,23 +1,32 @@
+using System.Collections.Generic;
 using UnityEditor;
 using UnityEngine;
 
 public static class ProceduralNatureMeshAssetGenerator
 {
-    private const string OutputFolder = "Assets/GeneratedMeshes";
+    public const string MeshOutputFolder = "Assets/GeneratedMeshes";
+    public const string MaterialOutputFolder = "Assets/GeneratedMaterials";
+    public const string SharedMaterialAssetPath = MaterialOutputFolder + "/" + ProceduralNatureAssetCatalog.SharedMaterialAssetName + ".mat";
 
-    [MenuItem("Tools/SceneVertex/Generate Vertex Mesh Assets")]
+    private const string SharedShaderAssetPath = "Assets/Shaders/SceneVertexVertexColor.shader";
+
+    [MenuItem("Tools/SceneVertex/Generate Procedural Assets")]
     public static void GenerateAssets()
     {
-        EnsureOutputFolder();
-        var meshes = ProceduralNatureMeshFactory.CreateAllMeshes();
+        EnsureFolders();
+        CleanupObsoleteAssets();
+
+        var meshDefinitions = ProceduralNatureMeshFactory.CreateAllMeshes();
 
         AssetDatabase.StartAssetEditing();
         try
         {
-            foreach (var pair in meshes)
+            foreach (var definition in meshDefinitions)
             {
-                SaveMeshAsset($"{OutputFolder}/{pair.Key}.asset", pair.Value);
+                SaveMeshAsset($"{MeshOutputFolder}/{definition.AssetName}.asset", definition.Mesh);
             }
+
+            EnsureSharedMaterial();
         }
         finally
         {
@@ -26,15 +35,55 @@ public static class ProceduralNatureMeshAssetGenerator
 
         AssetDatabase.SaveAssets();
         AssetDatabase.Refresh();
-        Selection.activeObject = AssetDatabase.LoadAssetAtPath<Object>($"{OutputFolder}/Tree.asset");
-        Debug.Log($"Generated {meshes.Count} procedural mesh assets in {OutputFolder}.");
+        Selection.activeObject = AssetDatabase.LoadAssetAtPath<Object>($"{MeshOutputFolder}/TreeA.asset");
+        Debug.Log($"Generated {meshDefinitions.Count} mesh assets in {MeshOutputFolder} and one shared material in {MaterialOutputFolder}.");
     }
 
-    private static void EnsureOutputFolder()
+    private static void EnsureFolders()
     {
-        if (!AssetDatabase.IsValidFolder(OutputFolder))
+        if (!AssetDatabase.IsValidFolder(MeshOutputFolder))
         {
             AssetDatabase.CreateFolder("Assets", "GeneratedMeshes");
+        }
+
+        if (!AssetDatabase.IsValidFolder(MaterialOutputFolder))
+        {
+            AssetDatabase.CreateFolder("Assets", "GeneratedMaterials");
+        }
+    }
+
+    private static void CleanupObsoleteAssets()
+    {
+        var expectedMeshPaths = new HashSet<string>();
+        foreach (var assetName in ProceduralNatureAssetCatalog.GetAllMeshAssetNames())
+        {
+            expectedMeshPaths.Add($"{MeshOutputFolder}/{assetName}.asset");
+        }
+
+        var expectedMaterialPaths = new HashSet<string>
+        {
+            SharedMaterialAssetPath
+        };
+
+        DeleteUnexpectedAssets(MeshOutputFolder, "t:Mesh", expectedMeshPaths);
+        DeleteUnexpectedAssets(MaterialOutputFolder, "t:Material", expectedMaterialPaths);
+    }
+
+    private static void DeleteUnexpectedAssets(string folder, string searchFilter, HashSet<string> expectedPaths)
+    {
+        if (!AssetDatabase.IsValidFolder(folder))
+        {
+            return;
+        }
+
+        var guids = AssetDatabase.FindAssets(searchFilter, new[] { folder });
+        foreach (var guid in guids)
+        {
+            var assetPath = AssetDatabase.GUIDToAssetPath(guid);
+            if (!expectedPaths.Contains(assetPath))
+            {
+                AssetDatabase.DeleteAsset(assetPath);
+            }
         }
     }
 
@@ -51,5 +100,40 @@ public static class ProceduralNatureMeshAssetGenerator
         existingMesh.name = sourceMesh.name;
         Object.DestroyImmediate(sourceMesh);
         EditorUtility.SetDirty(existingMesh);
+    }
+
+    private static void EnsureSharedMaterial()
+    {
+        var shader = AssetDatabase.LoadAssetAtPath<Shader>(SharedShaderAssetPath);
+        if (shader == null)
+        {
+            shader = Shader.Find("SceneVertex/Vertex Color");
+        }
+
+        if (shader == null)
+        {
+            Debug.LogError("Could not find the shared vertex color shader.");
+            return;
+        }
+
+        var material = AssetDatabase.LoadAssetAtPath<Material>(SharedMaterialAssetPath);
+        if (material == null)
+        {
+            material = new Material(shader)
+            {
+                name = ProceduralNatureAssetCatalog.SharedMaterialAssetName,
+                enableInstancing = true
+            };
+            AssetDatabase.CreateAsset(material, SharedMaterialAssetPath);
+            return;
+        }
+
+        if (material.shader != shader)
+        {
+            material.shader = shader;
+        }
+
+        material.enableInstancing = true;
+        EditorUtility.SetDirty(material);
     }
 }
