@@ -1,0 +1,9 @@
+[package]
+name = "rustterrain"
+version = "0.1.0"
+edition = "2024"
+
+[dependencies]
+eframe = { version = "0.32", default-features = false, features = ["default_fonts", "wgpu"] }
+noise = "0.9"
+wgpu = { version = "25.0.2", default-features = false, features = ["dx12", "vulkan", "gles", "wgsl"] }

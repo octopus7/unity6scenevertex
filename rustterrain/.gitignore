@@ -1,0 +1,4 @@
+/target/
+
+# Rustfmt and editor backup files
+**/*.rs.bk
