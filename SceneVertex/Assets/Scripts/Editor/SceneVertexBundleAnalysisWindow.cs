@@ -62,6 +62,7 @@ public sealed class SceneVertexBundleAnalysisWindow : EditorWindow
 
     private void OnEnable()
     {
+        EnsureState();
         if (string.IsNullOrEmpty(analyzedSceneName))
         {
             AnalyzeActiveScene();
@@ -70,6 +71,7 @@ public sealed class SceneVertexBundleAnalysisWindow : EditorWindow
 
     private void OnGUI()
     {
+        EnsureState();
         EditorGUILayout.LabelField("Scene Vertex Analysis", EditorStyles.boldLabel);
         EditorGUILayout.HelpBox(
             "This view classifies scene mesh references by where their vertex data is likely to live for AssetBundle builds: scene-embedded, same scene bundle, external bundle, unassigned project asset, or built-in/package asset.",
@@ -152,6 +154,7 @@ public sealed class SceneVertexBundleAnalysisWindow : EditorWindow
 
     private void AnalyzeActiveScene()
     {
+        EnsureState();
         var scene = EditorSceneManager.GetActiveScene();
         if (!scene.IsValid())
         {
@@ -221,9 +224,17 @@ public sealed class SceneVertexBundleAnalysisWindow : EditorWindow
         Dictionary<MeshResidencyKind, long> categoryVertexCounts,
         HashSet<string> uniqueMeshKeys)
     {
+        var embeddedMesh = current.GetComponent<SceneVertexEmbeddedMeshData>();
+        if (embeddedMesh != null)
+        {
+            embeddedMesh.RebuildMesh();
+        }
+
+        var meshFilter = current.GetComponent<MeshFilter>();
+        var meshRenderer = current.GetComponent<MeshRenderer>();
         AddMeshUsage(
-            current.GetComponent<MeshFilter>()?.sharedMesh,
-            current.GetComponent<MeshRenderer>() != null,
+            meshFilter != null ? meshFilter.sharedMesh : null,
+            meshRenderer != null,
             current,
             sceneBundleName,
             groupedEntries,
@@ -232,9 +243,10 @@ public sealed class SceneVertexBundleAnalysisWindow : EditorWindow
             categoryVertexCounts,
             uniqueMeshKeys);
 
+        var skinnedMeshRenderer = current.GetComponent<SkinnedMeshRenderer>();
         AddMeshUsage(
-            current.GetComponent<SkinnedMeshRenderer>()?.sharedMesh,
-            current.GetComponent<SkinnedMeshRenderer>() != null,
+            skinnedMeshRenderer != null ? skinnedMeshRenderer.sharedMesh : null,
+            skinnedMeshRenderer != null,
             current,
             sceneBundleName,
             groupedEntries,
@@ -333,9 +345,14 @@ public sealed class SceneVertexBundleAnalysisWindow : EditorWindow
             return MeshResidencyKind.SceneEmbedded;
         }
 
-        if (!EditorUtility.IsPersistent(mesh) || string.IsNullOrEmpty(assetPath))
+        if (!EditorUtility.IsPersistent(mesh))
         {
             return MeshResidencyKind.SceneEmbedded;
+        }
+
+        if (string.IsNullOrEmpty(assetPath))
+        {
+            return MeshResidencyKind.BuiltinOrPackageAsset;
         }
 
         if (!assetPath.StartsWith("Assets/", StringComparison.OrdinalIgnoreCase))
@@ -413,6 +430,7 @@ public sealed class SceneVertexBundleAnalysisWindow : EditorWindow
 
     private void ClearReport()
     {
+        EnsureState();
         analyzedSceneName = string.Empty;
         analyzedScenePath = string.Empty;
         analyzedSceneBundleName = string.Empty;
@@ -425,5 +443,11 @@ public sealed class SceneVertexBundleAnalysisWindow : EditorWindow
         categorySummaries.Clear();
         usageEntries.Clear();
         Repaint();
+    }
+
+    private void EnsureState()
+    {
+        categorySummaries ??= new List<CategorySummary>();
+        usageEntries ??= new List<MeshUsageEntry>();
     }
 }

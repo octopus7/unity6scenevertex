@@ -63,9 +63,15 @@ public sealed class ProceduralNatureLayoutWindow : EditorWindow
     }
 
     private const string GroundName = "SceneVertex_Ground100m";
+    private const string GroundMeshName = "SceneVertex_Ground100m_Mesh";
     private const string LayoutRootName = "SceneVertex_AutoLayout";
     private const float GroundSize = 100f;
     private const float HalfGroundSize = GroundSize * 0.5f;
+    private const StaticEditorFlags PlacementStaticFlags =
+        StaticEditorFlags.ContributeGI |
+        StaticEditorFlags.OccludeeStatic |
+        StaticEditorFlags.OccluderStatic |
+        StaticEditorFlags.ReflectionProbeStatic;
 
     [SerializeField] private PlacementPattern pattern = PlacementPattern.NaturalClearing;
     [SerializeField] private int treeCount = 18;
@@ -559,7 +565,7 @@ public sealed class ProceduralNatureLayoutWindow : EditorWindow
         foreach (var request in requests)
         {
             var variants = assets.Meshes[request.Kind];
-            var mesh = variants[Mathf.Clamp(request.VariantIndex, 0, variants.Count - 1)];
+            var sourceMesh = variants[Mathf.Clamp(request.VariantIndex, 0, variants.Count - 1)];
             var gameObject = new GameObject($"{request.Kind}_{parent.childCount:000}");
             Undo.RegisterCreatedObjectUndo(gameObject, "Create Procedural Placement");
             gameObject.transform.SetParent(parent, false);
@@ -567,12 +573,13 @@ public sealed class ProceduralNatureLayoutWindow : EditorWindow
             gameObject.transform.localScale = Vector3.one * request.UniformScale;
 
             var meshFilter = gameObject.AddComponent<MeshFilter>();
-            meshFilter.sharedMesh = mesh;
-
             var meshRenderer = gameObject.AddComponent<MeshRenderer>();
+            meshFilter.sharedMesh = sourceMesh;
             meshRenderer.sharedMaterial = assets.SharedMaterial;
+            meshRenderer.receiveGI = ReceiveGI.Lightmaps;
+            GameObjectUtility.SetStaticEditorFlags(gameObject, PlacementStaticFlags);
 
-            var verticalOffset = -mesh.bounds.min.y * request.UniformScale;
+            var verticalOffset = -sourceMesh.bounds.min.y * request.UniformScale;
             gameObject.transform.position = new Vector3(request.Position.x, verticalOffset, request.Position.y);
         }
     }
@@ -582,7 +589,7 @@ public sealed class ProceduralNatureLayoutWindow : EditorWindow
         var plane = FindMarkedObject(scene, SceneVertexGeneratedObjectKind.GroundPlane) ?? FindNamedObject(scene, GroundName);
         if (plane == null)
         {
-            plane = GameObject.CreatePrimitive(PrimitiveType.Plane);
+            plane = new GameObject(GroundName);
             Undo.RegisterCreatedObjectUndo(plane, "Create 100m Ground Plane");
         }
 
@@ -590,6 +597,50 @@ public sealed class ProceduralNatureLayoutWindow : EditorWindow
         plane.transform.position = Vector3.zero;
         plane.transform.rotation = Quaternion.identity;
         plane.transform.localScale = new Vector3(GroundSize / 10f, 1f, GroundSize / 10f);
+        GameObjectUtility.SetStaticEditorFlags(plane, PlacementStaticFlags);
+
+        var meshFilter = plane.GetComponent<MeshFilter>();
+        if (meshFilter == null)
+        {
+            meshFilter = Undo.AddComponent<MeshFilter>(plane);
+        }
+
+        var meshRenderer = plane.GetComponent<MeshRenderer>();
+        if (meshRenderer == null)
+        {
+            meshRenderer = Undo.AddComponent<MeshRenderer>(plane);
+        }
+        meshRenderer.receiveGI = ReceiveGI.Lightmaps;
+
+        var embeddedMesh = plane.GetComponent<SceneVertexEmbeddedMeshData>();
+        if (embeddedMesh == null)
+        {
+            embeddedMesh = Undo.AddComponent<SceneVertexEmbeddedMeshData>(plane);
+        }
+
+        if (plane.GetComponent<MeshCollider>() == null)
+        {
+            Undo.AddComponent<MeshCollider>(plane);
+        }
+
+        Undo.RecordObject(embeddedMesh, "Update 100m Ground Plane");
+        CreateGroundPlaneData(out var vertices, out var triangles, out var normals, out var uv, out var colors);
+        embeddedMesh.SetMeshData(GroundMeshName, vertices, triangles, normals, uv, colors);
+
+        if (meshRenderer.sharedMaterial == null)
+        {
+            var groundMaterial = AssetDatabase.LoadAssetAtPath<Material>(ProceduralNatureMeshAssetGenerator.SharedMaterialAssetPath);
+            if (groundMaterial == null)
+            {
+                ProceduralNatureMeshAssetGenerator.GenerateAssets();
+                groundMaterial = AssetDatabase.LoadAssetAtPath<Material>(ProceduralNatureMeshAssetGenerator.SharedMaterialAssetPath);
+            }
+
+            if (groundMaterial != null)
+            {
+                meshRenderer.sharedMaterial = groundMaterial;
+            }
+        }
 
         var marker = plane.GetComponent<SceneVertexGeneratedObjectMarker>();
         if (marker == null)
@@ -599,6 +650,58 @@ public sealed class ProceduralNatureLayoutWindow : EditorWindow
 
         marker.kind = SceneVertexGeneratedObjectKind.GroundPlane;
         return plane;
+    }
+
+    private static void CreateGroundPlaneData(
+        out Vector3[] vertices,
+        out int[] triangles,
+        out Vector3[] normals,
+        out Vector2[] uv,
+        out Color[] colors)
+    {
+        const int segments = 10;
+        const float basePlaneSize = 10f;
+        var vertexCountPerAxis = segments + 1;
+        vertices = new Vector3[vertexCountPerAxis * vertexCountPerAxis];
+        normals = new Vector3[vertices.Length];
+        uv = new Vector2[vertices.Length];
+        colors = new Color[vertices.Length];
+        triangles = new int[segments * segments * 6];
+
+        var vertexIndex = 0;
+        for (var z = 0; z <= segments; z++)
+        {
+            for (var x = 0; x <= segments; x++)
+            {
+                var xPos = ((float)x / segments - 0.5f) * basePlaneSize;
+                var zPos = ((float)z / segments - 0.5f) * basePlaneSize;
+                vertices[vertexIndex] = new Vector3(xPos, 0f, zPos);
+                normals[vertexIndex] = Vector3.up;
+                uv[vertexIndex] = new Vector2((float)x / segments, (float)z / segments);
+                var shade = Mathf.Lerp(0.72f, 0.9f, (float)z / segments);
+                colors[vertexIndex] = new Color(0.18f * shade, 0.48f * shade, 0.2f * shade, 1f);
+                vertexIndex++;
+            }
+        }
+
+        var triangleIndex = 0;
+        for (var z = 0; z < segments; z++)
+        {
+            for (var x = 0; x < segments; x++)
+            {
+                var bottomLeft = z * vertexCountPerAxis + x;
+                var bottomRight = bottomLeft + 1;
+                var topLeft = bottomLeft + vertexCountPerAxis;
+                var topRight = topLeft + 1;
+
+                triangles[triangleIndex++] = bottomLeft;
+                triangles[triangleIndex++] = topLeft;
+                triangles[triangleIndex++] = topRight;
+                triangles[triangleIndex++] = bottomLeft;
+                triangles[triangleIndex++] = topRight;
+                triangles[triangleIndex++] = bottomRight;
+            }
+        }
     }
 
     private static GameObject GetOrCreateLayoutRoot(Scene scene)
