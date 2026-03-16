@@ -23,6 +23,7 @@ public static class ProceduralNatureMeshAssetGenerator
         {
             foreach (var definition in meshDefinitions)
             {
+                EnsureLightmapUvChannel(definition.Mesh);
                 SaveMeshAsset($"{MeshOutputFolder}/{definition.AssetName}.asset", definition.Mesh);
             }
 
@@ -93,13 +94,32 @@ public static class ProceduralNatureMeshAssetGenerator
         if (existingMesh == null)
         {
             AssetDatabase.CreateAsset(sourceMesh, assetPath);
+            EnsureLightmapUvChannel(sourceMesh);
+            EditorUtility.SetDirty(sourceMesh);
             return;
         }
 
         EditorUtility.CopySerialized(sourceMesh, existingMesh);
         existingMesh.name = sourceMesh.name;
+        EnsureLightmapUvChannel(existingMesh);
         Object.DestroyImmediate(sourceMesh);
         EditorUtility.SetDirty(existingMesh);
+    }
+
+    public static bool EnsureLightmapUvChannel(Mesh mesh)
+    {
+        if (mesh == null || mesh.vertexCount == 0 || mesh.triangles == null || mesh.triangles.Length == 0)
+        {
+            return false;
+        }
+
+        if (mesh.uv2 != null && mesh.uv2.Length == mesh.vertexCount)
+        {
+            return false;
+        }
+
+        Unwrapping.GenerateSecondaryUVSet(mesh);
+        return true;
     }
 
     private static void EnsureSharedMaterial()

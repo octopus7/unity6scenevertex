@@ -11,6 +11,7 @@ public sealed class SceneVertexEmbeddedMeshData : MonoBehaviour
     [SerializeField] private int[] triangles = Array.Empty<int>();
     [SerializeField] private Vector3[] normals = Array.Empty<Vector3>();
     [SerializeField] private Vector2[] uv = Array.Empty<Vector2>();
+    [SerializeField] private Vector2[] uv2 = Array.Empty<Vector2>();
     [SerializeField] private Color[] colors = Array.Empty<Color>();
 
     [NonSerialized] private Mesh generatedMesh;
@@ -23,6 +24,7 @@ public sealed class SceneVertexEmbeddedMeshData : MonoBehaviour
         int[] newTriangles,
         Vector3[] newNormals,
         Vector2[] newUv,
+        Vector2[] newUv2,
         Color[] newColors)
     {
         meshName = string.IsNullOrWhiteSpace(newMeshName) ? "SceneVertexEmbeddedMesh" : newMeshName;
@@ -30,6 +32,7 @@ public sealed class SceneVertexEmbeddedMeshData : MonoBehaviour
         triangles = CloneOrEmpty(newTriangles);
         normals = CloneOrEmpty(newNormals);
         uv = CloneOrEmpty(newUv);
+        uv2 = CloneOrEmpty(newUv2);
         colors = CloneOrEmpty(newColors);
         RebuildMesh();
     }
@@ -38,7 +41,7 @@ public sealed class SceneVertexEmbeddedMeshData : MonoBehaviour
     {
         if (sourceMesh == null)
         {
-            SetMeshData(newMeshName, Array.Empty<Vector3>(), Array.Empty<int>(), Array.Empty<Vector3>(), Array.Empty<Vector2>(), Array.Empty<Color>());
+            SetMeshData(newMeshName, Array.Empty<Vector3>(), Array.Empty<int>(), Array.Empty<Vector3>(), Array.Empty<Vector2>(), Array.Empty<Vector2>(), Array.Empty<Color>());
             return;
         }
 
@@ -59,6 +62,7 @@ public sealed class SceneVertexEmbeddedMeshData : MonoBehaviour
             sourceMesh.triangles,
             sourceMesh.normals,
             sourceMesh.uv,
+            sourceMesh.uv2,
             sourceColors);
     }
 
@@ -79,6 +83,11 @@ public sealed class SceneVertexEmbeddedMeshData : MonoBehaviour
         if (uv != null && uv.Length == generatedMesh.vertexCount)
         {
             generatedMesh.uv = uv;
+        }
+
+        if (uv2 != null && uv2.Length == generatedMesh.vertexCount)
+        {
+            generatedMesh.uv2 = uv2;
         }
 
         if (colors != null && colors.Length == generatedMesh.vertexCount)

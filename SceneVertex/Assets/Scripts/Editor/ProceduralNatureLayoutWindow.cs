@@ -491,6 +491,7 @@ public sealed class ProceduralNatureLayoutWindow : EditorWindow
 
     private static void LoadMeshes(Dictionary<ProceduralNaturePropCategory, List<Mesh>> meshes, List<string> missing)
     {
+        var updatedAnyMesh = false;
         foreach (var category in ProceduralNatureAssetCatalog.GetAllCategories())
         {
             var list = new List<Mesh>();
@@ -503,6 +504,12 @@ public sealed class ProceduralNatureLayoutWindow : EditorWindow
                     continue;
                 }
 
+                if (ProceduralNatureMeshAssetGenerator.EnsureLightmapUvChannel(mesh))
+                {
+                    EditorUtility.SetDirty(mesh);
+                    updatedAnyMesh = true;
+                }
+
                 list.Add(mesh);
             }
 
@@ -510,6 +517,11 @@ public sealed class ProceduralNatureLayoutWindow : EditorWindow
             {
                 meshes[category] = list;
             }
+        }
+
+        if (updatedAnyMesh)
+        {
+            AssetDatabase.SaveAssets();
         }
     }
 
@@ -626,8 +638,8 @@ public sealed class ProceduralNatureLayoutWindow : EditorWindow
         }
 
         Undo.RecordObject(embeddedMesh, "Update 100m Ground Plane");
-        CreateGroundPlaneData(out var vertices, out var triangles, out var normals, out var uv, out var colors);
-        embeddedMesh.SetMeshData(GroundMeshName, vertices, triangles, normals, uv, colors);
+        CreateGroundPlaneData(out var vertices, out var triangles, out var normals, out var uv, out var uv2, out var colors);
+        embeddedMesh.SetMeshData(GroundMeshName, vertices, triangles, normals, uv, uv2, colors);
 
         if (meshRenderer.sharedMaterial == null)
         {
@@ -659,6 +671,7 @@ public sealed class ProceduralNatureLayoutWindow : EditorWindow
         out int[] triangles,
         out Vector3[] normals,
         out Vector2[] uv,
+        out Vector2[] uv2,
         out Color[] colors)
     {
         const int segments = 10;
@@ -667,6 +680,7 @@ public sealed class ProceduralNatureLayoutWindow : EditorWindow
         vertices = new Vector3[vertexCountPerAxis * vertexCountPerAxis];
         normals = new Vector3[vertices.Length];
         uv = new Vector2[vertices.Length];
+        uv2 = new Vector2[vertices.Length];
         colors = new Color[vertices.Length];
         triangles = new int[segments * segments * 6];
 
@@ -680,6 +694,7 @@ public sealed class ProceduralNatureLayoutWindow : EditorWindow
                 vertices[vertexIndex] = new Vector3(xPos, 0f, zPos);
                 normals[vertexIndex] = Vector3.up;
                 uv[vertexIndex] = new Vector2((float)x / segments, (float)z / segments);
+                uv2[vertexIndex] = uv[vertexIndex];
                 var shade = Mathf.Lerp(0.72f, 0.9f, (float)z / segments);
                 colors[vertexIndex] = new Color(0.18f * shade, 0.48f * shade, 0.2f * shade, 1f);
                 vertexIndex++;
