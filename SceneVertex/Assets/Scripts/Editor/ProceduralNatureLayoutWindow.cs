@@ -77,12 +77,40 @@ public sealed class ProceduralNatureLayoutWindow : EditorWindow
     [SerializeField] private int seed = 12345;
     [SerializeField] private bool replacePreviousLayout = true;
     [SerializeField] private bool generateMissingAssets = true;
+    [SerializeField] private bool saveScenesBeforeBake = true;
+
+    private bool lastBakeRunning;
 
     [MenuItem("Tools/SceneVertex/Layout Window")]
     public static void OpenWindow()
     {
         var window = GetWindow<ProceduralNatureLayoutWindow>("SceneVertex Layout");
-        window.minSize = new Vector2(360f, 430f);
+        window.minSize = new Vector2(360f, 520f);
+    }
+
+    private void OnEnable()
+    {
+        lastBakeRunning = Lightmapping.isRunning;
+    }
+
+    private void Update()
+    {
+        var isRunning = Lightmapping.isRunning;
+        if (isRunning != lastBakeRunning)
+        {
+            if (!isRunning)
+            {
+                Debug.Log($"Lighting bake finished for scene '{EditorSceneManager.GetActiveScene().name}'.");
+            }
+
+            lastBakeRunning = isRunning;
+            Repaint();
+        }
+
+        if (isRunning)
+        {
+            Repaint();
+        }
     }
 
     private void OnGUI()
@@ -133,6 +161,35 @@ public sealed class ProceduralNatureLayoutWindow : EditorWindow
         if (GUILayout.Button("Clear Placed Objects + Ground"))
         {
             ClearGeneratedObjectsInActiveScene(true);
+        }
+
+        GUILayout.Space(6f);
+        using (new EditorGUILayout.VerticalScope("box"))
+        {
+            EditorGUILayout.LabelField("Lighting", EditorStyles.boldLabel);
+            EditorGUILayout.LabelField("Status", Lightmapping.isRunning ? "Baking..." : "Idle");
+            saveScenesBeforeBake = EditorGUILayout.ToggleLeft("Save open scenes before bake", saveScenesBeforeBake);
+
+            using (new EditorGUI.DisabledScope(Lightmapping.isRunning))
+            {
+                if (GUILayout.Button("Bake Scene Lighting"))
+                {
+                    BakeSceneLighting();
+                }
+            }
+
+            using (new EditorGUI.DisabledScope(!Lightmapping.isRunning))
+            {
+                if (GUILayout.Button("Cancel Lighting Bake"))
+                {
+                    CancelLightingBake();
+                }
+            }
+
+            if (GUILayout.Button("Clear Baked Lighting"))
+            {
+                ClearBakedLighting();
+            }
         }
     }
 
@@ -233,6 +290,64 @@ public sealed class ProceduralNatureLayoutWindow : EditorWindow
         Selection.activeGameObject = container;
         EditorSceneManager.MarkSceneDirty(scene);
         Undo.CollapseUndoOperations(undoGroup);
+    }
+
+    private void BakeSceneLighting()
+    {
+        var scene = EditorSceneManager.GetActiveScene();
+        if (!scene.IsValid())
+        {
+            EditorUtility.DisplayDialog("No Active Scene", "Open a scene before starting a lighting bake.", "OK");
+            return;
+        }
+
+        if (Lightmapping.isRunning)
+        {
+            return;
+        }
+
+        if (saveScenesBeforeBake && !EditorSceneManager.SaveOpenScenes())
+        {
+            return;
+        }
+
+        lastBakeRunning = true;
+        Lightmapping.BakeAsync();
+        Debug.Log($"Started lighting bake for scene '{scene.name}'.");
+        Repaint();
+    }
+
+    private void CancelLightingBake()
+    {
+        if (!Lightmapping.isRunning)
+        {
+            return;
+        }
+
+        Lightmapping.Cancel();
+        lastBakeRunning = false;
+        Debug.Log("Canceled lighting bake.");
+        Repaint();
+    }
+
+    private void ClearBakedLighting()
+    {
+        if (Lightmapping.isRunning)
+        {
+            EditorUtility.DisplayDialog("Lighting Bake Running", "Cancel the current bake before clearing baked lighting.", "OK");
+            return;
+        }
+
+        Lightmapping.Clear();
+        var scene = EditorSceneManager.GetActiveScene();
+        if (scene.IsValid())
+        {
+            EditorSceneManager.MarkSceneDirty(scene);
+        }
+
+        DynamicGI.UpdateEnvironment();
+        Debug.Log($"Cleared baked lighting for scene '{scene.name}'.");
+        Repaint();
     }
 
     private RequiredAssets LoadRequiredAssets(bool allowGenerate)
