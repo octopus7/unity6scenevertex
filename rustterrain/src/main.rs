@@ -2,23 +2,28 @@
 
 use std::{
     fs,
-    path::PathBuf,
+    path::{Path, PathBuf},
     time::{SystemTime, UNIX_EPOCH},
 };
 
 use eframe::egui::{
     self, Align, CentralPanel, Color32, ColorImage, Context, Direction, Layout, PointerButton,
-    Pos2, Rect, Sense, TextureHandle, TextureOptions, TopBottomPanel, Vec2, ViewportBuilder,
+    Pos2, Rect, Sense, SidePanel, Slider, Stroke, TextureHandle, TextureOptions, TopBottomPanel,
+    Vec2, ViewportBuilder,
 };
-use image::{ColorType, ImageFormat};
+use image::{ColorType, ImageFormat, ImageReader, imageops::FilterType};
 use noise::{NoiseFn, OpenSimplex, Perlin};
+use rfd::FileDialog;
 
 const BITMAP_SIZE: usize = 1024;
 const BITMAP_PIXELS: usize = BITMAP_SIZE * BITMAP_SIZE;
 const MIN_BRUSH_RADIUS: f32 = 4.0;
 const MAX_BRUSH_RADIUS: f32 = 160.0;
 const SEA_LEVEL: f32 = 0.42;
-const HEIGHTMAP_FILE: &str = "generated/heightmap_latest.png";
+const STANDARD_STRENGTH_SCALE: f32 = 0.08;
+const AUTOSAVE_HEIGHTMAP_FILE: &str = "generated/heightmap_latest.png";
+const MIN_CONTOUR_STEP: f32 = 0.01;
+const MAX_CONTOUR_STEP: f32 = 0.25;
 
 fn main() -> eframe::Result<()> {
     let options = eframe::NativeOptions {
@@ -37,18 +42,71 @@ fn main() -> eframe::Result<()> {
     )
 }
 
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum ToolKind {
+    Standard,
+    TargetHeight,
+    PickHeight,
+    Blur,
+}
+
+impl ToolKind {
+    fn label(self) -> &'static str {
+        match self {
+            Self::Standard => "Standard",
+            Self::TargetHeight => "Target Height",
+            Self::PickHeight => "Pick Height",
+            Self::Blur => "Blur",
+        }
+    }
+
+    fn description(self) -> &'static str {
+        match self {
+            Self::Standard => "Left drag raises terrain. Right drag lowers terrain.",
+            Self::TargetHeight => {
+                "Left drag moves terrain toward the target height without overshooting."
+            }
+            Self::PickHeight => {
+                "Click the canvas to sample a height, then the previous tool is restored."
+            }
+            Self::Blur => "Left drag smooths sharp height transitions inside the brush.",
+        }
+    }
+
+    fn preview_color(self) -> Color32 {
+        match self {
+            Self::Standard => Color32::from_rgb(239, 196, 73),
+            Self::TargetHeight => Color32::from_rgb(76, 186, 182),
+            Self::PickHeight => Color32::from_rgb(242, 242, 242),
+            Self::Blur => Color32::from_rgb(202, 118, 74),
+        }
+    }
+}
+
+#[derive(Clone, Copy)]
+enum StrokeAction {
+    Standard(f32),
+    TargetHeight,
+    Blur,
+}
+
 struct TerrainApp {
     heightmap: Vec<f32>,
     texture: Option<TextureHandle>,
     texture_dirty: bool,
     brush_radius: f32,
     brush_strength: f32,
-    selected_tool: usize,
+    active_tool: ToolKind,
+    previous_tool: ToolKind,
     last_drag_pos: Option<Pos2>,
     hover_pixel: Option<(usize, usize)>,
+    hover_bitmap_pos: Option<Pos2>,
     seed: u32,
-    save_status: String,
-    pending_save: bool,
+    status_message: String,
+    pending_autosave: bool,
+    target_height: f32,
+    contour_step: f32,
+    active_heightmap_path: Option<PathBuf>,
 }
 
 impl TerrainApp {
@@ -58,17 +116,33 @@ impl TerrainApp {
             texture: None,
             texture_dirty: true,
             brush_radius: 28.0,
-            brush_strength: 0.028,
-            selected_tool: 0,
+            brush_strength: 0.35,
+            active_tool: ToolKind::Standard,
+            previous_tool: ToolKind::Standard,
             last_drag_pos: None,
             hover_pixel: None,
+            hover_bitmap_pos: None,
             seed: 0,
-            save_status: String::new(),
-            pending_save: false,
+            status_message: String::new(),
+            pending_autosave: false,
+            target_height: 0.5,
+            contour_step: 0.05,
+            active_heightmap_path: None,
         };
         app.regenerate_terrain();
         app.ensure_texture(&cc.egui_ctx);
         app
+    }
+
+    fn select_tool(&mut self, tool: ToolKind) {
+        if tool != ToolKind::PickHeight {
+            self.previous_tool = tool;
+        } else if self.active_tool != ToolKind::PickHeight {
+            self.previous_tool = self.active_tool;
+        }
+
+        self.active_tool = tool;
+        self.last_drag_pos = None;
     }
 
     fn ensure_texture(&mut self, ctx: &Context) {
@@ -124,6 +198,63 @@ impl TerrainApp {
         ColorImage::from_rgba_unmultiplied([BITMAP_SIZE, BITMAP_SIZE], &rgba)
     }
 
+    fn controls_ui(&mut self, ctx: &Context) {
+        SidePanel::left("controls_panel")
+            .resizable(false)
+            .default_width(252.0)
+            .show(ctx, |ui| {
+                ui.heading("Terrain Tools");
+                ui.label(self.active_tool.description());
+                ui.separator();
+
+                ui.label("Mode");
+                for tool in [
+                    ToolKind::Standard,
+                    ToolKind::TargetHeight,
+                    ToolKind::PickHeight,
+                    ToolKind::Blur,
+                ] {
+                    if ui
+                        .selectable_label(self.active_tool == tool, tool.label())
+                        .clicked()
+                    {
+                        self.select_tool(tool);
+                    }
+                }
+
+                ui.separator();
+                ui.add(
+                    Slider::new(&mut self.brush_radius, MIN_BRUSH_RADIUS..=MAX_BRUSH_RADIUS)
+                        .text("Brush"),
+                );
+                ui.add(Slider::new(&mut self.brush_strength, 0.02..=1.0).text("Strength"));
+                ui.add(Slider::new(&mut self.target_height, 0.0..=1.0).text("Target"));
+                ui.add(
+                    Slider::new(&mut self.contour_step, MIN_CONTOUR_STEP..=MAX_CONTOUR_STEP)
+                        .text("Contour Step"),
+                );
+
+                if ui.button("Regenerate").clicked() {
+                    self.regenerate_terrain();
+                }
+
+                ui.separator();
+                if ui.button("Save Heightmap").clicked() {
+                    self.save_heightmap_dialog();
+                }
+                if ui.button("Load Heightmap").clicked() {
+                    self.load_heightmap_dialog();
+                }
+                if ui.button("Export Contours").clicked() {
+                    self.export_contours_dialog();
+                }
+
+                ui.separator();
+                ui.label(format!("Source {}", self.source_summary()));
+                ui.label(format!("Autosave {}", AUTOSAVE_HEIGHTMAP_FILE));
+            });
+    }
+
     fn canvas_ui(&mut self, ui: &mut egui::Ui) {
         self.ensure_texture(ui.ctx());
 
@@ -152,6 +283,7 @@ impl TerrainApp {
                 }
 
                 self.handle_canvas_input(ui.ctx(), &response, rect);
+                self.draw_brush_preview(ui, rect);
             },
         );
     }
@@ -168,45 +300,110 @@ impl TerrainApp {
         }
 
         let primary_active = response.dragged_by(PointerButton::Primary)
-            || response.clicked_by(PointerButton::Primary);
+            || (response.hovered() && ctx.input(|input| input.pointer.primary_down()));
         let secondary_active = response.dragged_by(PointerButton::Secondary)
-            || response.clicked_by(PointerButton::Secondary);
+            || (response.hovered() && ctx.input(|input| input.pointer.secondary_down()));
 
-        if let Some(pointer_pos) = response.interact_pointer_pos() {
+        if let Some(pointer_pos) = response
+            .hover_pos()
+            .or_else(|| response.interact_pointer_pos())
+        {
             let bitmap_pos = screen_to_bitmap(rect, pointer_pos);
             let hover_x = bitmap_pos.x.round().clamp(0.0, (BITMAP_SIZE - 1) as f32) as usize;
             let hover_y = bitmap_pos.y.round().clamp(0.0, (BITMAP_SIZE - 1) as f32) as usize;
             self.hover_pixel = Some((hover_x, hover_y));
+            self.hover_bitmap_pos = Some(bitmap_pos);
 
-            let delta = if primary_active {
-                Some(self.brush_strength)
-            } else if secondary_active {
-                Some(-self.brush_strength)
-            } else {
-                None
+            if self.active_tool == ToolKind::PickHeight
+                && response.clicked_by(PointerButton::Primary)
+            {
+                self.sample_height(hover_x, hover_y);
+                self.last_drag_pos = None;
+                return;
+            }
+
+            let action = match self.active_tool {
+                ToolKind::Standard if primary_active => Some(StrokeAction::Standard(
+                    self.brush_strength * STANDARD_STRENGTH_SCALE,
+                )),
+                ToolKind::Standard if secondary_active => Some(StrokeAction::Standard(
+                    -self.brush_strength * STANDARD_STRENGTH_SCALE,
+                )),
+                ToolKind::TargetHeight if primary_active => Some(StrokeAction::TargetHeight),
+                ToolKind::Blur if primary_active => Some(StrokeAction::Blur),
+                _ => None,
             };
 
-            if let Some(amount) = delta {
+            if let Some(action) = action {
                 let previous = self.last_drag_pos.unwrap_or(bitmap_pos);
-                self.paint_stroke(previous, bitmap_pos, amount);
+                self.apply_stroke(previous, bitmap_pos, action);
                 self.last_drag_pos = Some(bitmap_pos);
             } else {
                 self.last_drag_pos = None;
             }
         } else {
             self.hover_pixel = None;
+            self.hover_bitmap_pos = None;
             self.last_drag_pos = None;
         }
 
         if !primary_active && !secondary_active {
-            if was_dragging && self.pending_save {
-                self.save_heightmap_to_disk();
+            if was_dragging && self.pending_autosave {
+                self.autosave_heightmap();
             }
             self.last_drag_pos = None;
         }
     }
 
-    fn paint_stroke(&mut self, from: Pos2, to: Pos2, amount: f32) {
+    fn draw_brush_preview(&self, ui: &mut egui::Ui, rect: Rect) {
+        let Some(hover_bitmap_pos) = self.hover_bitmap_pos else {
+            return;
+        };
+
+        let center = bitmap_to_screen(rect, hover_bitmap_pos);
+        let radius = rect.width() * (self.brush_radius / (BITMAP_SIZE as f32 - 1.0));
+        let color = self.active_tool.preview_color();
+
+        ui.painter()
+            .circle_stroke(center, radius.max(1.0), Stroke::new(2.0, color));
+        ui.painter()
+            .circle_stroke(center, (radius * 0.32).max(2.0), Stroke::new(1.0, color));
+        ui.painter().circle_filled(center, 1.8, color);
+
+        if self.active_tool == ToolKind::PickHeight {
+            let arm = 9.0;
+            ui.painter().line_segment(
+                [
+                    Pos2::new(center.x - arm, center.y),
+                    Pos2::new(center.x + arm, center.y),
+                ],
+                Stroke::new(1.5, color),
+            );
+            ui.painter().line_segment(
+                [
+                    Pos2::new(center.x, center.y - arm),
+                    Pos2::new(center.x, center.y + arm),
+                ],
+                Stroke::new(1.5, color),
+            );
+        }
+    }
+
+    fn sample_height(&mut self, x: usize, y: usize) {
+        let idx = y * BITMAP_SIZE + x;
+        self.target_height = self.heightmap[idx];
+        self.status_message = format!(
+            "Sampled target height {:.3} from ({x}, {y})",
+            self.target_height
+        );
+        self.active_tool = if self.previous_tool == ToolKind::PickHeight {
+            ToolKind::Standard
+        } else {
+            self.previous_tool
+        };
+    }
+
+    fn apply_stroke(&mut self, from: Pos2, to: Pos2, action: StrokeAction) {
         let distance = from.distance(to);
         let spacing = (self.brush_radius * 0.35).max(1.0);
         let steps = (distance / spacing).ceil().max(1.0) as usize;
@@ -214,17 +411,21 @@ impl TerrainApp {
         for step in 0..=steps {
             let t = step as f32 / steps as f32;
             let point = Pos2::new(lerp(from.x, to.x, t), lerp(from.y, to.y, t));
-            self.paint_disc(point, amount);
+            match action {
+                StrokeAction::Standard(amount) => self.paint_standard_disc(point, amount),
+                StrokeAction::TargetHeight => self.paint_target_disc(point),
+                StrokeAction::Blur => self.paint_blur_disc(point),
+            }
         }
+
+        self.texture_dirty = true;
+        self.pending_autosave = true;
     }
 
-    fn paint_disc(&mut self, center: Pos2, amount: f32) {
+    fn paint_standard_disc(&mut self, center: Pos2, amount: f32) {
         let radius = self.brush_radius;
         let radius_sq = radius * radius;
-        let x_min = (center.x - radius).floor().max(0.0) as i32;
-        let x_max = (center.x + radius).ceil().min((BITMAP_SIZE - 1) as f32) as i32;
-        let y_min = (center.y - radius).floor().max(0.0) as i32;
-        let y_max = (center.y + radius).ceil().min((BITMAP_SIZE - 1) as f32) as i32;
+        let (x_min, x_max, y_min, y_max) = brush_bounds(center, radius);
 
         for y in y_min..=y_max {
             for x in x_min..=x_max {
@@ -242,27 +443,206 @@ impl TerrainApp {
                 self.heightmap[idx] = updated;
             }
         }
+    }
 
-        self.texture_dirty = true;
-        self.pending_save = true;
+    fn paint_target_disc(&mut self, center: Pos2) {
+        let radius = self.brush_radius;
+        let radius_sq = radius * radius;
+        let (x_min, x_max, y_min, y_max) = brush_bounds(center, radius);
+
+        for y in y_min..=y_max {
+            for x in x_min..=x_max {
+                let dx = x as f32 - center.x;
+                let dy = y as f32 - center.y;
+                let distance_sq = dx * dx + dy * dy;
+                if distance_sq > radius_sq {
+                    continue;
+                }
+
+                let falloff = 1.0 - (distance_sq / radius_sq);
+                let idx = y as usize * BITMAP_SIZE + x as usize;
+                let current = self.heightmap[idx];
+                let blend = (self.brush_strength * falloff).clamp(0.0, 1.0);
+                self.heightmap[idx] = lerp(current, self.target_height, blend);
+            }
+        }
+    }
+
+    fn paint_blur_disc(&mut self, center: Pos2) {
+        let radius = self.brush_radius;
+        let radius_sq = radius * radius;
+        let (x_min, x_max, y_min, y_max) = brush_bounds(center, radius);
+        let sample_x_min = (x_min - 1).max(0);
+        let sample_x_max = (x_max + 1).min(BITMAP_SIZE as i32 - 1);
+        let sample_y_min = (y_min - 1).max(0);
+        let sample_y_max = (y_max + 1).min(BITMAP_SIZE as i32 - 1);
+        let sample_width = (sample_x_max - sample_x_min + 1) as usize;
+        let sample_height = (sample_y_max - sample_y_min + 1) as usize;
+        let mut source = vec![0.0; sample_width * sample_height];
+
+        for sample_y in sample_y_min..=sample_y_max {
+            let src_offset = sample_y as usize * BITMAP_SIZE + sample_x_min as usize;
+            let dst_offset = (sample_y - sample_y_min) as usize * sample_width;
+            source[dst_offset..dst_offset + sample_width]
+                .copy_from_slice(&self.heightmap[src_offset..src_offset + sample_width]);
+        }
+
+        for y in y_min..=y_max {
+            for x in x_min..=x_max {
+                let dx = x as f32 - center.x;
+                let dy = y as f32 - center.y;
+                let distance_sq = dx * dx + dy * dy;
+                if distance_sq > radius_sq {
+                    continue;
+                }
+
+                let mut blurred_sum = 0.0;
+                let mut weight_sum = 0.0;
+                let sample_local_x = x - sample_x_min;
+                let sample_local_y = y - sample_y_min;
+
+                for kernel_y in -1..=1 {
+                    for kernel_x in -1..=1 {
+                        let weight = match (kernel_x, kernel_y) {
+                            (0, 0) => 4.0,
+                            (0, _) | (_, 0) => 2.0,
+                            _ => 1.0,
+                        };
+                        let source_x =
+                            (sample_local_x + kernel_x).clamp(0, sample_width as i32 - 1) as usize;
+                        let source_y =
+                            (sample_local_y + kernel_y).clamp(0, sample_height as i32 - 1) as usize;
+                        blurred_sum += source[source_y * sample_width + source_x] * weight;
+                        weight_sum += weight;
+                    }
+                }
+
+                let falloff = 1.0 - (distance_sq / radius_sq);
+                let blur_strength = (self.brush_strength * falloff).clamp(0.0, 1.0);
+                let idx = y as usize * BITMAP_SIZE + x as usize;
+                let blurred = blurred_sum / weight_sum;
+                let current = self.heightmap[idx];
+                self.heightmap[idx] = lerp(current, blurred, blur_strength);
+            }
+        }
     }
 
     fn regenerate_terrain(&mut self) {
         self.seed = next_seed();
         self.heightmap = generate_heightmap(self.seed);
         self.texture_dirty = true;
-        self.pending_save = true;
+        self.pending_autosave = true;
         self.last_drag_pos = None;
-        self.save_heightmap_to_disk();
+        self.active_heightmap_path = None;
+        self.hover_bitmap_pos = None;
+        self.hover_pixel = None;
+        self.target_height = 0.5;
+        self.autosave_heightmap();
     }
 
-    fn save_heightmap_to_disk(&mut self) {
-        let path = PathBuf::from(HEIGHTMAP_FILE);
-        if let Some(parent) = path.parent() {
-            if let Err(error) = fs::create_dir_all(parent) {
-                self.save_status = format!("Save failed: {error}");
-                return;
+    fn autosave_heightmap(&mut self) {
+        let path = PathBuf::from(AUTOSAVE_HEIGHTMAP_FILE);
+        match self.save_heightmap_png(&path) {
+            Ok(()) => {
+                self.status_message = format!("Autosaved {}", path.display());
+                self.pending_autosave = false;
             }
+            Err(error) => {
+                self.status_message = format!("Autosave failed: {error}");
+            }
+        }
+    }
+
+    fn save_heightmap_dialog(&mut self) {
+        let dialog = self
+            .png_dialog()
+            .set_file_name(self.suggested_heightmap_name());
+        if let Some(path) = dialog.save_file() {
+            match self.save_heightmap_png(&path) {
+                Ok(()) => {
+                    self.active_heightmap_path = Some(path.clone());
+                    self.status_message = format!("Saved {}", path.display());
+                }
+                Err(error) => {
+                    self.status_message = format!("Save failed: {error}");
+                }
+            }
+        }
+    }
+
+    fn load_heightmap_dialog(&mut self) {
+        if let Some(path) = self.png_dialog().pick_file() {
+            match self.load_heightmap_png(&path) {
+                Ok(()) => {
+                    self.active_heightmap_path = Some(path.clone());
+                    self.status_message = format!("Loaded {}", path.display());
+                }
+                Err(error) => {
+                    self.status_message = format!("Load failed: {error}");
+                }
+            }
+        }
+    }
+
+    fn export_contours_dialog(&mut self) {
+        let dialog = self
+            .png_dialog()
+            .set_file_name(self.suggested_contour_name());
+        if let Some(path) = dialog.save_file() {
+            match self.save_contour_png(&path) {
+                Ok(()) => {
+                    self.status_message = format!("Exported contours to {}", path.display());
+                }
+                Err(error) => {
+                    self.status_message = format!("Contour export failed: {error}");
+                }
+            }
+        }
+    }
+
+    fn png_dialog(&self) -> FileDialog {
+        let mut dialog = FileDialog::new().add_filter("PNG image", &["png"]);
+        if let Some(active_path) = &self.active_heightmap_path {
+            if let Some(parent) = active_path.parent() {
+                dialog = dialog.set_directory(parent);
+            }
+        } else {
+            dialog = dialog.set_directory("generated");
+        }
+        dialog
+    }
+
+    fn suggested_heightmap_name(&self) -> String {
+        self.active_heightmap_path
+            .as_ref()
+            .and_then(|path| path.file_name())
+            .map(|name| name.to_string_lossy().into_owned())
+            .unwrap_or_else(|| "heightmap.png".to_owned())
+    }
+
+    fn suggested_contour_name(&self) -> String {
+        if let Some(path) = &self.active_heightmap_path {
+            if let Some(stem) = path.file_stem() {
+                return format!("{}_contours.png", stem.to_string_lossy());
+            }
+        }
+
+        "heightmap_contours.png".to_owned()
+    }
+
+    fn source_summary(&self) -> String {
+        if let Some(path) = &self.active_heightmap_path {
+            path.file_name()
+                .map(|name| name.to_string_lossy().into_owned())
+                .unwrap_or_else(|| path.display().to_string())
+        } else {
+            format!("seed {}", self.seed)
+        }
+    }
+
+    fn save_heightmap_png(&self, path: &Path) -> Result<(), String> {
+        if let Some(parent) = path.parent() {
+            fs::create_dir_all(parent).map_err(|error| error.to_string())?;
         }
 
         let mut grayscale = Vec::with_capacity(BITMAP_PIXELS);
@@ -270,36 +650,134 @@ impl TerrainApp {
             grayscale.push((height.clamp(0.0, 1.0) * 255.0).round() as u8);
         }
 
-        match image::save_buffer_with_format(
+        image::save_buffer_with_format(
             &path,
             &grayscale,
             BITMAP_SIZE as u32,
             BITMAP_SIZE as u32,
             ColorType::L8,
             ImageFormat::Png,
-        ) {
-            Ok(()) => {
-                self.save_status = format!("Saved {}", path.display());
-                self.pending_save = false;
-            }
-            Err(error) => {
-                self.save_status = format!("Save failed: {error}");
+        )
+        .map_err(|error| error.to_string())
+    }
+
+    fn load_heightmap_png(&mut self, path: &Path) -> Result<(), String> {
+        let reader = ImageReader::open(path).map_err(|error| error.to_string())?;
+        let image = reader.decode().map_err(|error| error.to_string())?;
+        let grayscale = image.to_luma8();
+        let grayscale = if grayscale.width() != BITMAP_SIZE as u32
+            || grayscale.height() != BITMAP_SIZE as u32
+        {
+            image::imageops::resize(
+                &grayscale,
+                BITMAP_SIZE as u32,
+                BITMAP_SIZE as u32,
+                FilterType::Triangle,
+            )
+        } else {
+            grayscale
+        };
+
+        self.heightmap = grayscale
+            .into_raw()
+            .into_iter()
+            .map(|value| value as f32 / 255.0)
+            .collect();
+        self.texture_dirty = true;
+        self.last_drag_pos = None;
+        self.hover_pixel = None;
+        self.hover_bitmap_pos = None;
+        self.pending_autosave = false;
+
+        if let Err(error) = self.save_heightmap_png(Path::new(AUTOSAVE_HEIGHTMAP_FILE)) {
+            self.status_message = format!("Autosave mirror failed: {error}");
+        }
+
+        Ok(())
+    }
+
+    fn save_contour_png(&self, path: &Path) -> Result<(), String> {
+        if let Some(parent) = path.parent() {
+            fs::create_dir_all(parent).map_err(|error| error.to_string())?;
+        }
+
+        let rgba = self.build_contour_image();
+        image::save_buffer_with_format(
+            path,
+            &rgba,
+            BITMAP_SIZE as u32,
+            BITMAP_SIZE as u32,
+            ColorType::Rgba8,
+            ImageFormat::Png,
+        )
+        .map_err(|error| error.to_string())
+    }
+
+    fn build_contour_image(&self) -> Vec<u8> {
+        let mut rgba = Vec::with_capacity(BITMAP_PIXELS * 4);
+
+        for y in 0..BITMAP_SIZE {
+            let y_up = y.saturating_sub(1);
+            let y_down = (y + 1).min(BITMAP_SIZE - 1);
+
+            for x in 0..BITMAP_SIZE {
+                let x_left = x.saturating_sub(1);
+                let x_right = (x + 1).min(BITMAP_SIZE - 1);
+                let idx = y * BITMAP_SIZE + x;
+                let height = self.heightmap[idx];
+                let bucket = contour_bucket(height, self.contour_step);
+                let neighbor_changed = bucket
+                    != contour_bucket(self.heightmap[y * BITMAP_SIZE + x_left], self.contour_step)
+                    || bucket
+                        != contour_bucket(
+                            self.heightmap[y * BITMAP_SIZE + x_right],
+                            self.contour_step,
+                        )
+                    || bucket
+                        != contour_bucket(
+                            self.heightmap[y_up * BITMAP_SIZE + x],
+                            self.contour_step,
+                        )
+                    || bucket
+                        != contour_bucket(
+                            self.heightmap[y_down * BITMAP_SIZE + x],
+                            self.contour_step,
+                        );
+
+                let color = if neighbor_changed {
+                    if height < SEA_LEVEL {
+                        [78, 121, 181, 255]
+                    } else {
+                        [52, 44, 38, 255]
+                    }
+                } else {
+                    [247, 244, 238, 255]
+                };
+                rgba.extend_from_slice(&color);
             }
         }
+
+        rgba
     }
 }
 
 impl eframe::App for TerrainApp {
     fn update(&mut self, ctx: &Context, _frame: &mut eframe::Frame) {
+        self.controls_ui(ctx);
+
         TopBottomPanel::top("toolbar_info").show(ctx, |ui| {
             ui.horizontal(|ui| {
-                ui.label("Left drag: raise terrain");
+                ui.label(self.active_tool.label());
                 ui.separator();
-                ui.label("Right drag: lower terrain");
+                ui.label(self.active_tool.description());
                 ui.separator();
                 ui.label("Wheel: brush size");
                 ui.separator();
                 ui.label(format!("Brush {:.0}px", self.brush_radius));
+                ui.separator();
+                ui.label(format!("Strength {:.2}", self.brush_strength));
+                ui.separator();
+                ui.label(format!("Target {:.3}", self.target_height));
                 if let Some((x, y)) = self.hover_pixel {
                     let idx = y * BITMAP_SIZE + x;
                     ui.separator();
@@ -308,31 +786,12 @@ impl eframe::App for TerrainApp {
                 ui.separator();
                 ui.label(format!("Sea {:.2}", SEA_LEVEL));
                 ui.separator();
-                ui.label(&self.save_status);
+                ui.label(&self.status_message);
                 ui.with_layout(Layout::right_to_left(Align::Center), |ui| {
-                    ui.label(format!("Seed {}", self.seed));
+                    ui.label(self.source_summary());
                 });
             });
         });
-
-        TopBottomPanel::bottom("bottom_tools")
-            .resizable(false)
-            .min_height(68.0)
-            .show(ctx, |ui| {
-                ui.horizontal_wrapped(|ui| {
-                    if ui.button("Regenerate").clicked() {
-                        self.regenerate_terrain();
-                    }
-
-                    for tool_idx in 1..10 {
-                        let label = format!("Tool {:02}", tool_idx + 1);
-                        let selected = self.selected_tool == tool_idx;
-                        if ui.selectable_label(selected, label).clicked() {
-                            self.selected_tool = tool_idx;
-                        }
-                    }
-                });
-            });
 
         CentralPanel::default().show(ctx, |ui| {
             self.canvas_ui(ui);
@@ -446,6 +905,24 @@ fn ridged_fbm(
     }
 }
 
+fn brush_bounds(center: Pos2, radius: f32) -> (i32, i32, i32, i32) {
+    (
+        (center.x - radius).floor().max(0.0) as i32,
+        (center.x + radius).ceil().min((BITMAP_SIZE - 1) as f32) as i32,
+        (center.y - radius).floor().max(0.0) as i32,
+        (center.y + radius).ceil().min((BITMAP_SIZE - 1) as f32) as i32,
+    )
+}
+
+fn bitmap_to_screen(rect: Rect, position: Pos2) -> Pos2 {
+    let u = position.x / (BITMAP_SIZE as f32 - 1.0);
+    let v = position.y / (BITMAP_SIZE as f32 - 1.0);
+    Pos2::new(
+        rect.left() + u * rect.width(),
+        rect.top() + v * rect.height(),
+    )
+}
+
 fn screen_to_bitmap(rect: Rect, position: Pos2) -> Pos2 {
     let u = ((position.x - rect.left()) / rect.width()).clamp(0.0, 1.0);
     let v = ((position.y - rect.top()) / rect.height()).clamp(0.0, 1.0);
@@ -458,6 +935,10 @@ fn screen_to_bitmap(rect: Rect, position: Pos2) -> Pos2 {
 fn smoothstep(edge0: f32, edge1: f32, x: f32) -> f32 {
     let t = ((x - edge0) / (edge1 - edge0)).clamp(0.0, 1.0);
     t * t * (3.0 - 2.0 * t)
+}
+
+fn contour_bucket(height: f32, contour_step: f32) -> i32 {
+    (height / contour_step.max(MIN_CONTOUR_STEP)).floor() as i32
 }
 
 fn terrain_color(height: f32) -> [u8; 3] {
