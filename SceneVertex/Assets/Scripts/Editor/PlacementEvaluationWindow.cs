@@ -33,7 +33,7 @@ public sealed class PlacementEvaluationWindow : EditorWindow
     {
         EditorGUILayout.LabelField("Placement Evaluation", EditorStyles.boldLabel);
         EditorGUILayout.HelpBox(
-            "Reads authored JSON files from Assets/PlacementEvaluation, validates them, and renders a curated 1024x512 top-view PNG preview without touching the scene.",
+            "Reads the element catalog and feature-level layout JSON from Assets/PlacementEvaluation, validates them, and renders a curated 1024x512 top-view PNG preview without touching the scene.",
             MessageType.Info);
 
         using (new EditorGUILayout.VerticalScope("box"))

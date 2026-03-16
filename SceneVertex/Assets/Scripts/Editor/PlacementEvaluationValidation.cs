@@ -28,15 +28,6 @@ internal static class PlacementValidation
         "fence"
     };
 
-    private static readonly HashSet<string> GroundIds = new(StringComparer.OrdinalIgnoreCase)
-    {
-        "water",
-        "pebble",
-        "sand",
-        "soil",
-        "grass"
-    };
-
     private static readonly HashSet<string> PropIds = new(StringComparer.OrdinalIgnoreCase)
     {
         "tree",
@@ -76,24 +67,34 @@ internal static class PlacementValidation
             result.Errors.Add("placement_layout_curated.json is missing 'typeVariants'.");
         }
 
-        if (layout.groundPatches == null)
+        if (layout.meadow == null)
         {
-            result.Errors.Add("placement_layout_curated.json is missing 'groundPatches'.");
+            result.Errors.Add("placement_layout_curated.json is missing 'meadow'.");
         }
 
-        if (layout.roadSegments == null)
+        if (layout.ponds == null)
         {
-            result.Errors.Add("placement_layout_curated.json is missing 'roadSegments'.");
+            result.Errors.Add("placement_layout_curated.json is missing 'ponds'.");
         }
 
-        if (layout.props == null)
+        if (layout.trails == null)
         {
-            result.Errors.Add("placement_layout_curated.json is missing 'props'.");
+            result.Errors.Add("placement_layout_curated.json is missing 'trails'.");
         }
 
-        if (layout.fenceSegments == null)
+        if (layout.groves == null)
         {
-            result.Errors.Add("placement_layout_curated.json is missing 'fenceSegments'.");
+            result.Errors.Add("placement_layout_curated.json is missing 'groves'.");
+        }
+
+        if (layout.scatterZones == null)
+        {
+            result.Errors.Add("placement_layout_curated.json is missing 'scatterZones'.");
+        }
+
+        if (layout.fenceLines == null)
+        {
+            result.Errors.Add("placement_layout_curated.json is missing 'fenceLines'.");
         }
 
         if (string.IsNullOrWhiteSpace(layout.sceneName))
@@ -183,111 +184,336 @@ internal static class PlacementValidation
             }
         }
 
-        if (layout.groundPatches != null)
+        ValidateMeadow(layout.meadow, result);
+        ValidatePonds(layout.ponds, result);
+        ValidateTrails(layout.trails, result);
+        ValidateGroves(layout.groves, result);
+        ValidateScatterZones(layout.scatterZones, result);
+        ValidateFenceLines(layout.fenceLines, result);
+
+        if (layout.ponds != null && layout.ponds.Length == 0)
         {
-            for (var index = 0; index < layout.groundPatches.Length; index++)
-            {
-                var patch = layout.groundPatches[index];
-                if (patch == null)
-                {
-                    result.Errors.Add($"groundPatches[{index}] is null.");
-                    continue;
-                }
-
-                if (!GroundIds.Contains(patch.id))
-                {
-                    result.Errors.Add($"groundPatches[{index}] uses unsupported id '{patch.id}'.");
-                }
-
-                if (patch.radiusScale <= 0f)
-                {
-                    result.Errors.Add($"groundPatches[{index}] radiusScale must be greater than 0.");
-                }
-
-                if (patch.aspectX <= 0f || patch.aspectY <= 0f)
-                {
-                    result.Errors.Add($"groundPatches[{index}] aspectX and aspectY must be greater than 0.");
-                }
-
-                ValidateOpacity(patch.opacity, $"groundPatches[{index}]", result);
-                WarnIfOutOfBounds(patch.x, patch.y, $"groundPatches[{index}]", result);
-            }
+            result.Warnings.Add("No ponds were authored. The curated sample normally uses at least one water feature.");
         }
 
-        if (layout.roadSegments != null)
+        if (layout.trails != null && layout.trails.Length == 0)
         {
-            for (var index = 0; index < layout.roadSegments.Length; index++)
-            {
-                var segment = layout.roadSegments[index];
-                if (segment == null)
-                {
-                    result.Errors.Add($"roadSegments[{index}] is null.");
-                    continue;
-                }
-
-                if (segment.lengthScale <= 0f)
-                {
-                    result.Errors.Add($"roadSegments[{index}] lengthScale must be greater than 0.");
-                }
-
-                if (segment.thicknessScale <= 0f)
-                {
-                    result.Errors.Add($"roadSegments[{index}] thicknessScale must be greater than 0.");
-                }
-
-                ValidateOpacity(segment.opacity, $"roadSegments[{index}]", result);
-                WarnIfOutOfBounds(segment.x, segment.y, $"roadSegments[{index}]", result);
-            }
-        }
-
-        if (layout.props != null)
-        {
-            for (var index = 0; index < layout.props.Length; index++)
-            {
-                var prop = layout.props[index];
-                if (prop == null)
-                {
-                    result.Errors.Add($"props[{index}] is null.");
-                    continue;
-                }
-
-                if (!PropIds.Contains(prop.id))
-                {
-                    result.Errors.Add($"props[{index}] uses unsupported id '{prop.id}'.");
-                }
-
-                if (prop.radiusScale <= 0f)
-                {
-                    result.Errors.Add($"props[{index}] radiusScale must be greater than 0.");
-                }
-
-                ValidateOpacity(prop.opacity, $"props[{index}]", result);
-                WarnIfOutOfBounds(prop.x, prop.y, $"props[{index}]", result);
-            }
-        }
-
-        if (layout.fenceSegments != null)
-        {
-            for (var index = 0; index < layout.fenceSegments.Length; index++)
-            {
-                var segment = layout.fenceSegments[index];
-                if (segment == null)
-                {
-                    result.Errors.Add($"fenceSegments[{index}] is null.");
-                    continue;
-                }
-
-                if (segment.lengthScale <= 0f)
-                {
-                    result.Errors.Add($"fenceSegments[{index}] lengthScale must be greater than 0.");
-                }
-
-                ValidateOpacity(segment.opacity, $"fenceSegments[{index}]", result);
-                WarnIfOutOfBounds(segment.x, segment.y, $"fenceSegments[{index}]", result);
-            }
+            result.Warnings.Add("No trails were authored. The new layout schema expects at least one trail corridor.");
         }
 
         return result;
+    }
+
+    private static void ValidateMeadow(PlacementMeadowSettings meadow, PlacementValidationResult result)
+    {
+        if (meadow == null)
+        {
+            return;
+        }
+
+        if (meadow.accentGrassCount < 0)
+        {
+            result.Errors.Add("meadow.accentGrassCount must be 0 or greater.");
+        }
+
+        if (meadow.openCenterRadiusX <= 0f || meadow.openCenterRadiusY <= 0f)
+        {
+            result.Errors.Add("meadow.openCenterRadiusX and meadow.openCenterRadiusY must be greater than 0.");
+        }
+
+        WarnIfOutOfBounds(meadow.openCenterX, meadow.openCenterY, "meadow open center", result);
+    }
+
+    private static void ValidatePonds(PlacementPondFeature[] ponds, PlacementValidationResult result)
+    {
+        if (ponds == null)
+        {
+            return;
+        }
+
+        for (var index = 0; index < ponds.Length; index++)
+        {
+            var pond = ponds[index];
+            if (pond == null)
+            {
+                result.Errors.Add($"ponds[{index}] is null.");
+                continue;
+            }
+
+            if (pond.center == null)
+            {
+                result.Errors.Add($"ponds[{index}] is missing center.");
+                continue;
+            }
+
+            if (pond.radiusX <= 0f || pond.radiusY <= 0f)
+            {
+                result.Errors.Add($"ponds[{index}] radiusX and radiusY must be greater than 0.");
+            }
+
+            if (pond.sandWidth < 0f || pond.pebbleWidth < 0f)
+            {
+                result.Errors.Add($"ponds[{index}] sandWidth and pebbleWidth must be 0 or greater.");
+            }
+
+            if (pond.irregularity < 0f || pond.irregularity > 1f)
+            {
+                result.Errors.Add($"ponds[{index}] irregularity must be between 0 and 1.");
+            }
+
+            WarnIfOutOfBounds(pond.center.x, pond.center.y, $"ponds[{index}]", result);
+
+            if (pond.lobes == null)
+            {
+                result.Errors.Add($"ponds[{index}] is missing lobes.");
+                continue;
+            }
+
+            for (var lobeIndex = 0; lobeIndex < pond.lobes.Length; lobeIndex++)
+            {
+                var lobe = pond.lobes[lobeIndex];
+                if (lobe == null)
+                {
+                    result.Errors.Add($"ponds[{index}].lobes[{lobeIndex}] is null.");
+                    continue;
+                }
+
+                if (lobe.distance < 0f)
+                {
+                    result.Errors.Add($"ponds[{index}].lobes[{lobeIndex}] distance must be 0 or greater.");
+                }
+
+                if (lobe.radiusXScale <= 0f || lobe.radiusYScale <= 0f)
+                {
+                    result.Errors.Add($"ponds[{index}].lobes[{lobeIndex}] radius scales must be greater than 0.");
+                }
+            }
+        }
+    }
+
+    private static void ValidateTrails(PlacementTrailCorridor[] trails, PlacementValidationResult result)
+    {
+        if (trails == null)
+        {
+            return;
+        }
+
+        for (var index = 0; index < trails.Length; index++)
+        {
+            var trail = trails[index];
+            if (trail == null)
+            {
+                result.Errors.Add($"trails[{index}] is null.");
+                continue;
+            }
+
+            if (string.IsNullOrWhiteSpace(trail.id))
+            {
+                result.Errors.Add($"trails[{index}] requires a non-empty id.");
+            }
+
+            if (trail.points == null || trail.points.Length < 2)
+            {
+                result.Errors.Add($"trails[{index}] must contain at least 2 points.");
+                continue;
+            }
+
+            if (trail.traffic <= 0f)
+            {
+                result.Errors.Add($"trails[{index}] traffic must be greater than 0.");
+            }
+
+            if (trail.width <= 0f)
+            {
+                result.Errors.Add($"trails[{index}] width must be greater than 0.");
+            }
+
+            if (trail.soilExposure < 0f || trail.soilExposure > 1f)
+            {
+                result.Errors.Add($"trails[{index}] soilExposure must be between 0 and 1.");
+            }
+
+            if (trail.braid < 0f || trail.braid > 1f)
+            {
+                result.Errors.Add($"trails[{index}] braid must be between 0 and 1.");
+            }
+
+            if (trail.wander < 0f || trail.wander > 1f)
+            {
+                result.Errors.Add($"trails[{index}] wander must be between 0 and 1.");
+            }
+
+            for (var pointIndex = 0; pointIndex < trail.points.Length; pointIndex++)
+            {
+                var point = trail.points[pointIndex];
+                if (point == null)
+                {
+                    result.Errors.Add($"trails[{index}].points[{pointIndex}] is null.");
+                    continue;
+                }
+
+                WarnIfOutOfBounds(point.x, point.y, $"trails[{index}].points[{pointIndex}]", result);
+            }
+        }
+    }
+
+    private static void ValidateGroves(PlacementGroveZone[] groves, PlacementValidationResult result)
+    {
+        if (groves == null)
+        {
+            return;
+        }
+
+        for (var index = 0; index < groves.Length; index++)
+        {
+            var grove = groves[index];
+            if (grove == null)
+            {
+                result.Errors.Add($"groves[{index}] is null.");
+                continue;
+            }
+
+            if (grove.center == null)
+            {
+                result.Errors.Add($"groves[{index}] is missing center.");
+                continue;
+            }
+
+            if (grove.radiusX <= 0f || grove.radiusY <= 0f)
+            {
+                result.Errors.Add($"groves[{index}] radiusX and radiusY must be greater than 0.");
+            }
+
+            if (grove.treeCount < 0 || grove.bushCount < 0 || grove.mushroomCount < 0)
+            {
+                result.Errors.Add($"groves[{index}] counts must be 0 or greater.");
+            }
+
+            if (grove.innerClear < 0f || grove.innerClear >= 1f)
+            {
+                result.Errors.Add($"groves[{index}] innerClear must be between 0 and 1.");
+            }
+
+            if (grove.treeEdgeBias < 0f || grove.treeEdgeBias > 1f)
+            {
+                result.Errors.Add($"groves[{index}] treeEdgeBias must be between 0 and 1.");
+            }
+
+            WarnIfOutOfBounds(grove.center.x, grove.center.y, $"groves[{index}]", result);
+        }
+    }
+
+    private static void ValidateScatterZones(PlacementScatterZone[] scatterZones, PlacementValidationResult result)
+    {
+        if (scatterZones == null)
+        {
+            return;
+        }
+
+        for (var index = 0; index < scatterZones.Length; index++)
+        {
+            var zone = scatterZones[index];
+            if (zone == null)
+            {
+                result.Errors.Add($"scatterZones[{index}] is null.");
+                continue;
+            }
+
+            if (string.IsNullOrWhiteSpace(zone.id))
+            {
+                result.Errors.Add($"scatterZones[{index}] requires a non-empty id.");
+            }
+
+            if (!PropIds.Contains(zone.kind))
+            {
+                result.Errors.Add($"scatterZones[{index}] uses unsupported kind '{zone.kind}'.");
+            }
+
+            if (zone.center == null)
+            {
+                result.Errors.Add($"scatterZones[{index}] is missing center.");
+                continue;
+            }
+
+            if (zone.radiusX <= 0f || zone.radiusY <= 0f)
+            {
+                result.Errors.Add($"scatterZones[{index}] radiusX and radiusY must be greater than 0.");
+            }
+
+            if (zone.count < 0)
+            {
+                result.Errors.Add($"scatterZones[{index}] count must be 0 or greater.");
+            }
+
+            if (zone.innerRadius < 0f || zone.innerRadius > 1f)
+            {
+                result.Errors.Add($"scatterZones[{index}] innerRadius must be between 0 and 1.");
+            }
+
+            if (zone.scaleMin <= 0f || zone.scaleMax <= 0f || zone.scaleMax < zone.scaleMin)
+            {
+                result.Errors.Add($"scatterZones[{index}] scaleMin/scaleMax must be positive and ordered.");
+            }
+
+            if (zone.opacityMin < 0f || zone.opacityMax > 1f || zone.opacityMax < zone.opacityMin)
+            {
+                result.Errors.Add($"scatterZones[{index}] opacityMin/opacityMax must stay within 0..1 and be ordered.");
+            }
+
+            WarnIfOutOfBounds(zone.center.x, zone.center.y, $"scatterZones[{index}]", result);
+        }
+    }
+
+    private static void ValidateFenceLines(PlacementFenceLine[] fenceLines, PlacementValidationResult result)
+    {
+        if (fenceLines == null)
+        {
+            return;
+        }
+
+        for (var index = 0; index < fenceLines.Length; index++)
+        {
+            var line = fenceLines[index];
+            if (line == null)
+            {
+                result.Errors.Add($"fenceLines[{index}] is null.");
+                continue;
+            }
+
+            if (line.points == null || line.points.Length < 2)
+            {
+                result.Errors.Add($"fenceLines[{index}] must contain at least 2 points.");
+                continue;
+            }
+
+            if (line.density <= 0f)
+            {
+                result.Errors.Add($"fenceLines[{index}] density must be greater than 0.");
+            }
+
+            if (line.brokenness < 0f || line.brokenness > 1f)
+            {
+                result.Errors.Add($"fenceLines[{index}] brokenness must be between 0 and 1.");
+            }
+
+            if (line.lengthScale <= 0f)
+            {
+                result.Errors.Add($"fenceLines[{index}] lengthScale must be greater than 0.");
+            }
+
+            ValidateOpacity(line.opacity, $"fenceLines[{index}]", result);
+            for (var pointIndex = 0; pointIndex < line.points.Length; pointIndex++)
+            {
+                var point = line.points[pointIndex];
+                if (point == null)
+                {
+                    result.Errors.Add($"fenceLines[{index}].points[{pointIndex}] is null.");
+                    continue;
+                }
+
+                WarnIfOutOfBounds(point.x, point.y, $"fenceLines[{index}].points[{pointIndex}]", result);
+            }
+        }
     }
 
     private static void ValidateElementDefinition(PlacementElementDefinition definition, PlacementValidationResult result)

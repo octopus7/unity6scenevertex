@@ -2,6 +2,8 @@ using System;
 using System.IO;
 using UnityEngine;
 
+#pragma warning disable CS0649
+
 [Serializable]
 internal sealed class PlacementElementCatalog
 {
@@ -26,11 +28,14 @@ internal sealed class PlacementElementDefinition
 internal sealed class PlacementLayoutScene
 {
     public string sceneName = string.Empty;
+    public int seed = 1;
     public PlacementTypeVariant[] typeVariants = Array.Empty<PlacementTypeVariant>();
-    public PlacementGroundPatch[] groundPatches = Array.Empty<PlacementGroundPatch>();
-    public PlacementRoadSegment[] roadSegments = Array.Empty<PlacementRoadSegment>();
-    public PlacementPropInstance[] props = Array.Empty<PlacementPropInstance>();
-    public PlacementFenceSegment[] fenceSegments = Array.Empty<PlacementFenceSegment>();
+    public PlacementMeadowSettings meadow = new();
+    public PlacementPondFeature[] ponds = Array.Empty<PlacementPondFeature>();
+    public PlacementTrailCorridor[] trails = Array.Empty<PlacementTrailCorridor>();
+    public PlacementGroveZone[] groves = Array.Empty<PlacementGroveZone>();
+    public PlacementScatterZone[] scatterZones = Array.Empty<PlacementScatterZone>();
+    public PlacementFenceLine[] fenceLines = Array.Empty<PlacementFenceLine>();
 }
 
 [Serializable]
@@ -38,6 +43,101 @@ internal sealed class PlacementTypeVariant
 {
     public string id = string.Empty;
     public int variantIndex;
+}
+
+[Serializable]
+internal sealed class PlacementPoint
+{
+    public float x;
+    public float y;
+}
+
+[Serializable]
+internal sealed class PlacementMeadowSettings
+{
+    public int accentGrassCount = 96;
+    public float openCenterX = PlacementEvaluationPaths.CanvasWidth * 0.5f;
+    public float openCenterY = PlacementEvaluationPaths.CanvasHeight * 0.5f;
+    public float openCenterRadiusX = 220f;
+    public float openCenterRadiusY = 128f;
+    public float windAngleDeg = 8f;
+}
+
+[Serializable]
+internal sealed class PlacementPondFeature
+{
+    public PlacementPoint center = new();
+    public float radiusX = 72f;
+    public float radiusY = 56f;
+    public float rotationDeg;
+    public float sandWidth = 18f;
+    public float pebbleWidth = 10f;
+    public float irregularity = 0.22f;
+    public PlacementPondLobe[] lobes = Array.Empty<PlacementPondLobe>();
+}
+
+[Serializable]
+internal sealed class PlacementPondLobe
+{
+    public float angleDeg;
+    public float distance;
+    public float radiusXScale = 0.75f;
+    public float radiusYScale = 0.75f;
+    public float rotationDeg;
+}
+
+[Serializable]
+internal sealed class PlacementTrailCorridor
+{
+    public string id = string.Empty;
+    public PlacementPoint[] points = Array.Empty<PlacementPoint>();
+    public float traffic = 0.8f;
+    public float width = 1f;
+    public float soilExposure = 0.3f;
+    public float braid = 0.12f;
+    public float wander = 0.18f;
+}
+
+[Serializable]
+internal sealed class PlacementGroveZone
+{
+    public string id = string.Empty;
+    public PlacementPoint center = new();
+    public float radiusX = 76f;
+    public float radiusY = 52f;
+    public float rotationDeg;
+    public int treeCount = 16;
+    public int bushCount = 20;
+    public int mushroomCount = 12;
+    public float innerClear = 0.08f;
+    public float treeEdgeBias = 0.58f;
+}
+
+[Serializable]
+internal sealed class PlacementScatterZone
+{
+    public string id = string.Empty;
+    public string kind = string.Empty;
+    public PlacementPoint center = new();
+    public float radiusX = 40f;
+    public float radiusY = 20f;
+    public float rotationDeg;
+    public int count = 10;
+    public float innerRadius = 0f;
+    public float scaleMin = 0.8f;
+    public float scaleMax = 1.12f;
+    public float opacityMin = 0.58f;
+    public float opacityMax = 0.82f;
+}
+
+[Serializable]
+internal sealed class PlacementFenceLine
+{
+    public PlacementPoint[] points = Array.Empty<PlacementPoint>();
+    public float density = 1f;
+    public float brokenness = 0.12f;
+    public float lengthScale = 0.92f;
+    public float opacity = 0.8f;
 }
 
 [Serializable]
@@ -54,7 +154,7 @@ internal sealed class PlacementGroundPatch
 }
 
 [Serializable]
-internal sealed class PlacementRoadSegment
+internal sealed class PlacementTrailMark
 {
     public float x;
     public float y;
@@ -62,6 +162,7 @@ internal sealed class PlacementRoadSegment
     public float lengthScale = 1f;
     public float thicknessScale = 1f;
     public float opacity = 1f;
+    public float soilExposure = 0.3f;
 }
 
 [Serializable]
@@ -83,6 +184,14 @@ internal sealed class PlacementFenceSegment
     public float rotationDeg;
     public float lengthScale = 1f;
     public float opacity = 1f;
+}
+
+internal sealed class PlacementResolvedScene
+{
+    public PlacementGroundPatch[] groundPatches = Array.Empty<PlacementGroundPatch>();
+    public PlacementTrailMark[] trailMarks = Array.Empty<PlacementTrailMark>();
+    public PlacementPropInstance[] props = Array.Empty<PlacementPropInstance>();
+    public PlacementFenceSegment[] fenceSegments = Array.Empty<PlacementFenceSegment>();
 }
 
 internal static class PlacementEvaluationPaths
@@ -165,3 +274,5 @@ internal static class PlacementEvaluationDataLoader
         }
     }
 }
+
+#pragma warning restore CS0649

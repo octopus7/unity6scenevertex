@@ -1,264 +1,237 @@
-# JSON 제작 및 수정 규칙
+# 배치 JSON 수정 규칙
 
-이 문서는 `placement_elements.json` 과 `placement_layout_curated.json` 을 사람이 직접 수정하거나, 이후 에이전트에게 수정 요청할 때 따라야 하는 단일 기준 문서다.
+이 문서는 `placement_elements.json` 과 `placement_layout_curated.json` 을 수정할 때 따르는 기준 문서다.
+
+핵심 원칙은 하나다.
+
+- `placement_elements.json` 은 "무엇이 존재하는가"를 정의한다.
+- `placement_layout_curated.json` 은 "어떤 환경 의도로 배치가 생성되는가"를 정의한다.
+- 최종 나무 좌표, 최종 길 세그먼트, 최종 펜스 세그먼트는 이제 JSON에 직접 쓰지 않는다.
+- 최종 배치는 에디터 렌더 단계에서 내부적으로 생성된다.
 
 ## 1. 두 JSON의 역할
 
-- `placement_elements.json`
-  - 요소의 정의 파일이다.
-  - 각 요소의 `id`, `layer`, `shape`, 반경 또는 세그먼트 크기, 3가지 색 배리에이션을 가진다.
-  - 이 파일은 자주 바꾸지 않는다.
-- `placement_layout_curated.json`
-  - 실제 장면 구성 파일이다.
-  - 어떤 색 배리에이션을 이번 장면에서 쓸지, 바닥 패치와 길과 소품과 팬스를 어디에 둘지 정한다.
-  - 대부분의 큐레이션 수정은 이 파일에서만 해결한다.
+### `placement_elements.json`
 
-## 2. 절대 바꾸면 안 되는 공통 규칙
+- 요소 카탈로그다.
+- 각 요소의 `id`, `layer`, `shape`, 크기 기준치, 3색 배리에이션을 가진다.
+- 웬만하면 유지한다.
+- 아래 경우에만 수정한다.
+  - 요소 종류를 추가하거나 제거해야 할 때
+  - 모든 결과에 공통으로 적용될 기본 크기를 바꿔야 할 때
+  - 색 배리에이션 자체가 부족하거나 잘못되었을 때
 
-- 캔버스는 항상 `1024x512` 이다.
-- 좌표 원점은 좌상단이다.
-- `x` 는 오른쪽으로 증가하고 `y` 는 아래로 증가한다.
-- `rotationDeg` 는 시계방향 각도다.
-- `0` 도는 좌에서 우로 향한다.
-- 요소 종류는 아래 11개만 허용한다.
-  - `water`, `pebble`, `sand`, `soil`, `grass`, `road`, `tree`, `rock`, `bush`, `mushroom`, `fence`
-- 각 요소는 항상 3개의 색 배리에이션을 가진다.
-- `typeVariants` 는 위 11개 모든 요소를 반드시 한 번씩 가져야 한다.
-- 씬은 장면 오브젝트를 직접 생성하지 않고 JSON 두 개만 읽어 렌더한다.
+### `placement_layout_curated.json`
 
-## 3. 허용 필드와 필수 필드
+- 큐레이션 의도 파일이다.
+- 장면의 구도, 연못의 덩어리, 길의 흐름, 숲 군집, 산포 영역, 펜스 라인을 정의한다.
+- 대부분의 수정 요청은 이 파일에서 처리한다.
+- 이 파일에는 더 이상 `groundPatches`, `roadSegments`, `props`, `fenceSegments` 같은 최종 배치 배열이 없다.
 
-### 3-1. `placement_elements.json`
+## 2. 새 레이아웃 스키마
 
-- 루트 필드
-  - `canvasWidth`
-  - `canvasHeight`
-  - `elements`
-- 각 `elements[]` 항목 필수 필드
-  - `id`
-  - `layer`
-  - `shape`
-  - `variants`
-- 바닥과 소품 계열 필수 추가 필드
-  - `baseRadius`
-- 길과 팬스 계열 필수 추가 필드
-  - `segmentLength`
-  - `segmentThickness`
+루트 필드:
 
-### 3-2. `placement_layout_curated.json`
+- `sceneName`
+- `seed`
+- `typeVariants`
+- `meadow`
+- `ponds`
+- `trails`
+- `groves`
+- `scatterZones`
+- `fenceLines`
 
-- 루트 필드
-  - `sceneName`
-  - `typeVariants`
-  - `groundPatches`
-  - `roadSegments`
-  - `props`
-  - `fenceSegments`
-- `typeVariants[]`
-  - `id`
-  - `variantIndex`
-- `groundPatches[]`
-  - `id`
-  - `x`
-  - `y`
-  - `radiusScale`
-  - `aspectX`
-  - `aspectY`
+### `typeVariants`
+
+- 각 타입이 이번 장면에서 사용할 색 배리에이션 인덱스를 정한다.
+- 모든 11개 타입을 반드시 포함한다.
+- 허용 범위는 `0`, `1`, `2` 뿐이다.
+
+### `meadow`
+
+- 목초지의 바탕 분위기를 정한다.
+- 필드:
+  - `accentGrassCount`
+  - `openCenterX`
+  - `openCenterY`
+  - `openCenterRadiusX`
+  - `openCenterRadiusY`
+  - `windAngleDeg`
+
+의미:
+
+- `accentGrassCount`: 바탕 잔디 질감 보강량
+- `openCenter*`: 중앙 개활지로 비워 둘 영역
+- `windAngleDeg`: 잔디 결 방향
+
+### `ponds`
+
+- 연못은 하나 이상의 덩어리로 정의한다.
+- 각 항목 필드:
+  - `center`
+  - `radiusX`
+  - `radiusY`
   - `rotationDeg`
-  - `opacity`
-- `roadSegments[]`
-  - `x`
-  - `y`
+  - `sandWidth`
+  - `pebbleWidth`
+  - `irregularity`
+  - `lobes`
+
+의미:
+
+- `center`, `radiusX`, `radiusY`: 연못 본체
+- `sandWidth`: 모래 띠 두께
+- `pebbleWidth`: 자갈 띠 두께
+- `irregularity`: 가장자리 흔들림 정도
+- `lobes`: 본체에 붙는 보조 덩어리
+
+### `trails`
+
+- 길은 더 이상 최종 선분이 아니다.
+- 각 항목은 `사람이나 짐승이 다니는 흐름` 하나를 정의한다.
+- 각 항목 필드:
+  - `id`
+  - `points`
+  - `traffic`
+  - `width`
+  - `soilExposure`
+  - `braid`
+  - `wander`
+
+의미:
+
+- `points`: 길의 제어점
+- `traffic`: 얼마나 자주 밟히는지
+- `width`: 길 폭
+- `soilExposure`: 흙이 얼마나 드러나는지
+- `braid`: 갈라졌다 다시 합쳐지는 흔적의 정도
+- `wander`: 완만한 흔들림 정도
+
+### `groves`
+
+- 숲이나 수풀 군집의 큰 덩어리다.
+- 각 항목 필드:
+  - `id`
+  - `center`
+  - `radiusX`
+  - `radiusY`
   - `rotationDeg`
+  - `treeCount`
+  - `bushCount`
+  - `mushroomCount`
+  - `innerClear`
+  - `treeEdgeBias`
+
+의미:
+
+- 개별 오브젝트 좌표를 직접 적는 대신 군집의 성격만 적는다.
+- 내부 생성기가 이 값을 보고 나무, 덤불, 버섯을 뿌린다.
+
+### `scatterZones`
+
+- 바위 포인트, 추가 덤불, 그늘 버섯 같은 보조 산포 영역이다.
+- 각 항목 필드:
+  - `id`
+  - `kind`
+  - `center`
+  - `radiusX`
+  - `radiusY`
+  - `rotationDeg`
+  - `count`
+  - `innerRadius`
+  - `scaleMin`
+  - `scaleMax`
+  - `opacityMin`
+  - `opacityMax`
+
+### `fenceLines`
+
+- 펜스도 더 이상 최종 세그먼트 목록이 아니다.
+- 각 항목 필드:
+  - `points`
+  - `density`
+  - `brokenness`
   - `lengthScale`
-  - `thicknessScale`
-  - `opacity`
-- `props[]`
-  - `id`
-  - `x`
-  - `y`
-  - `radiusScale`
-  - `rotationDeg`
-  - `opacity`
-- `fenceSegments[]`
-  - `x`
-  - `y`
-  - `rotationDeg`
-  - `lengthScale`
   - `opacity`
 
-## 4. 요소 의미와 레이어 규칙
+의미:
 
-- `grass`
-  - 기본 배경과 초지 질감 보강용 패치다.
-- `soil`
-  - 길 어깨, 나무 밑, 눌린 땅 느낌을 만든다.
-- `sand`
-  - 물가의 완충 띠를 만든다.
-- `pebble`
-  - 물 가장자리나 경계 질감을 강조한다.
-- `water`
-  - 장면의 시선을 붙잡는 좌측 포컬 포인트다.
-- `road`
-  - 시선을 좌하단에서 우중앙으로 이끄는 흐름이다.
-- `tree`
-  - 큰 질량과 프레이밍을 담당한다.
-- `rock`
-  - 형태 대비와 경계 강조를 담당한다.
-- `bush`
-  - 중간 밀도를 채우고 나무와 길을 연결한다.
-- `mushroom`
-  - 작은 강조색 포인트다.
-- `fence`
-  - 우측 경계를 정리하고 화면 프레임 역할을 한다.
+- `points`: 펜스 라인 제어점
+- `density`: 세그먼트 밀도
+- `brokenness`: 일부 구간이 비는 정도
+- `lengthScale`: 평균 길이 스케일
 
-레이어 해석 규칙은 아래와 같다.
+## 3. 좌표계와 고정 규칙
 
-- `ground`
-  - 바닥 패치 전용이다.
-- `road`
-  - 길 세그먼트 전용이다.
-- `prop`
-  - 나무, 바위, 덤불, 버섯 전용이다.
-- `fence`
-  - 팬스 세그먼트 전용이다.
+- 캔버스는 항상 `1024x512`
+- 원점은 좌상단
+- `x` 는 오른쪽 증가
+- `y` 는 아래 증가
+- `rotationDeg` 는 시계 방향
+- `0` 도는 좌에서 우
 
-## 5. 색 배리에이션 선택 규칙
+## 4. 자연스럽게 보이게 만드는 핵심 규칙
 
-- 이번 장면은 요소별 글로벌 선택만 허용한다.
-- 같은 요소는 장면 안에서 `typeVariants` 의 `variantIndex` 하나만 쓴다.
-- 인스턴스별 색 선택 필드는 만들지 않는다.
-- 현재 큐레이션 기준값
-  - `grass=1`
-  - `soil=0`
-  - `sand=2`
-  - `pebble=1`
-  - `water=0`
-  - `road=1`
-  - `tree=0`
-  - `rock=1`
-  - `bush=2`
-  - `mushroom=0`
-  - `fence=2`
+- 길은 `road object` 가 아니라 `grass wear` 로 읽혀야 한다.
+- 메인 통행축은 1개, 보조 통행축은 1~3개 정도가 적당하다.
+- 길은 직선보다 완만한 눌림 흔적처럼 보여야 한다.
+- 큰 개활지 하나는 반드시 남긴다.
+- 연못은 독립 원형 하나보다 `본체 + 보조 lobe` 가 더 자연스럽다.
+- 나무는 경계와 군집을 만든다.
+- 덤불은 나무와 길 어깨를 연결한다.
+- 버섯은 그늘과 습기에 묶는다.
+- 펜스는 화면 경계 보조다. 중앙을 가르지 않는다.
 
-색 수정 시 지켜야 할 미감 규칙은 아래와 같다.
+## 5. 수정 요청을 JSON 변경으로 번역하는 방법
 
-- 물은 저채도 청록 계열을 유지한다.
-- 잔디, 나무, 덤불은 서로 아주 멀지 않은 녹색 계열을 유지한다.
-- 길과 흙은 따뜻한 갈색 계열을 유지한다.
-- 버섯만 상대적으로 눈에 띄게 하되 과채도는 금지한다.
-- 팬스는 날것의 나무색보다 오래된 목재 느낌이 낫다.
+### "길이 더 많이 보여야 해"
 
-## 6. 자연스럽고 예쁘게 보이게 만드는 구도 규칙
+- `trails` 배열을 본다.
+- 새 `trail` 하나를 추가하거나 기존 `traffic`, `width`, `braid` 를 올린다.
+- 이미 있는 길을 더 많이 보이게 하고 싶다면 `soilExposure` 를 약간만 올린다.
+- `placement_elements.json` 의 `road` 기본 값은 건드리지 않는다.
 
-- 모든 요소를 화면 전체에 균등 분포시키지 않는다.
-- 좌측 1/3 지점에 물을 둬서 포컬 포인트를 만든다.
-- 물 주변은 `water -> sand -> pebble -> grass` 흐름으로 읽히게 만든다.
-- 길은 화면을 자르는 직선이 아니라 부드러운 S 흐름으로 둔다.
-- 큰 나무는 좌상단과 우측 외곽에 두어 프레임을 만든다.
-- 나무 밑에는 덤불과 버섯이 연관되게 놓이게 한다.
-- 바위는 물가와 길 바깥 곡면에 둬서 경계를 잡는다.
-- 팬스는 장면의 주인공이 아니므로 우측 일부 구간만 사용한다.
-- 화면 중앙에는 너무 많은 큰 요소를 몰지 않는다.
-- 숨 쉴 빈 공간을 반드시 남긴다.
+### "길이 너무 계획적이야"
 
-## 7. 수정 요청을 JSON 변경으로 번역하는 규칙
+- `trails[].points` 의 각 점을 덜 정렬되게 바꾼다.
+- `wander` 를 소폭 올린다.
+- `braid` 를 너무 크게 준 경우 줄인다.
+- `traffic` 가 높은 길 수를 줄인다.
 
-- 색만 바꾸는 요청
-  - 우선 `placement_layout_curated.json` 의 `typeVariants` 를 본다.
-  - 색 배리에이션 자체가 부족하면 그때만 `placement_elements.json` 의 `variants` 를 수정한다.
-- 크기만 바꾸는 요청
-  - 특정 장면 인스턴스는 `radiusScale`, `lengthScale`, `thicknessScale` 로 해결한다.
-  - 요소 전체 기본 크기를 바꾸고 싶을 때만 `placement_elements.json` 의 `baseRadius` 또는 세그먼트 크기를 바꾼다.
-- 개수와 위치를 바꾸는 요청
-  - 항상 `placement_layout_curated.json` 에서 해결한다.
-- “더 자연스럽게”, “덜 답답하게”, “균형 다시 잡아” 같은 요청
-  - 기본적으로 `placement_layout_curated.json` 만 수정한다.
-  - `placement_elements.json` 은 유지한다.
+### "연못이 더 풍성했으면"
 
-## 8. 수정 시 우선순위
+- `ponds[].lobes` 를 추가하거나 각 lobe 의 `distance`, `radiusXScale`, `radiusYScale` 를 조정한다.
+- `sandWidth`, `pebbleWidth` 로 가장자리 층을 정리한다.
+- 물 기본 색이나 기본 반경은 카탈로그가 아니라면 손대지 않는다.
 
-1. 먼저 `placement_elements.json` 을 유지할 수 있는지 판단한다.
-2. 가능하면 `placement_layout_curated.json` 만 수정한다.
-3. 색 팔레트 자체가 부적절하거나 요소 정의가 틀렸을 때만 `placement_elements.json` 을 수정한다.
-4. 새 필드는 추가하지 않는다. 기존 스키마 안에서 해결한다.
+### "좌상단 숲을 줄이고 우하단에 무게를 더 줘"
 
-## 9. 예시 변경 요청 5개
+- `groves` 의 `treeCount`, `bushCount`, `mushroomCount` 를 옮긴다.
+- 필요한 경우 `groves[].center` 와 `radiusX`, `radiusY` 도 조정한다.
+- 추가 포인트는 `scatterZones` 로 보완한다.
 
-### 예시 1. "물을 지금보다 조금 더 넓게 해줘"
+### "펜스가 너무 눈에 띄어"
 
-- 수정 파일
-  - `placement_layout_curated.json`
-- 수정 위치
-  - `groundPatches` 배열에서 `id == "water"` 인 항목들
-  - 그 주변의 `sand`, `pebble` 항목 일부
-- 수정 방법
-  - 물 패치의 `radiusScale`, `aspectX`, `aspectY` 를 소폭 증가시킨다.
-  - 모래와 자갈 패치를 바깥쪽으로 조금 확장해 경계 층이 깨지지 않게 한다.
-- 건드리지 말 것
-  - `placement_elements.json` 의 `water.baseRadius`
+- `fenceLines[].opacity` 를 낮춘다.
+- `brokenness` 를 올린다.
+- `density` 를 줄인다.
 
-### 예시 2. "나무 수를 줄이고 오른쪽이 덜 답답했으면 좋겠어"
+## 6. 절대 바꾸면 안 되는 공통 규칙
 
-- 수정 파일
-  - `placement_layout_curated.json`
-- 수정 위치
-  - `props` 배열에서 `id == "tree"` 인 항목 일부
-  - 필요하면 근처 `bush` 와 `mushroom` 항목도 같이 정리
-- 수정 방법
-  - 우측 군집의 나무 1~2개를 제거하거나 외곽으로 이동한다.
-  - 트리 제거 후 남는 덤불과 버섯은 함께 정리해 관계가 끊기지 않게 한다.
-- 건드리지 말 것
-  - `tree` 의 색과 기본 반경 정의
+- `placement_layout_curated.json` 에 최종 인스턴스 배열을 다시 만들지 않는다.
+- `placement_elements.json` 에 장면별 의도를 넣지 않는다.
+- `typeVariants` 에서 같은 타입을 중복 정의하지 않는다.
+- `trails` 는 최소 2개의 `points` 를 가져야 한다.
+- `scatterZones.kind` 는 `tree`, `rock`, `bush`, `mushroom` 중 하나여야 한다.
 
-### 예시 3. "길이 조금 더 부드럽게 오른쪽 위를 향하게 바꿔줘"
+## 7. 변경 후 자체 검수 체크리스트
 
-- 수정 파일
-  - `placement_layout_curated.json`
-- 수정 위치
-  - `roadSegments`
-- 수정 방법
-  - 세그먼트의 `x`, `y`, `rotationDeg` 를 순차적으로 조정해 S 커브를 더 매끈하게 만든다.
-  - 급격한 회전 변화 대신 인접 세그먼트끼리 각도 차를 작게 유지한다.
-- 건드리지 말 것
-  - `road.segmentLength`
-  - `road.segmentThickness`
-
-### 예시 4. "팬스를 더 세워 보이게 하고 방향을 정리해줘"
-
-- 수정 파일
-  - `placement_layout_curated.json`
-- 수정 위치
-  - `fenceSegments`
-- 수정 방법
-  - 각 항목의 `rotationDeg` 를 80~120도 부근으로 재조정한다.
-  - 필요하면 `lengthScale` 을 미세 조정해서 연결감만 보정한다.
-- 건드리지 말 것
-  - `fence` 색상 팔레트와 두께 정의
-
-### 예시 5. "전체적으로 더 따뜻한 색감으로 만들어줘"
-
-- 수정 파일
-  - 우선 `placement_layout_curated.json`
-  - 부족하면 `placement_elements.json`
-- 수정 위치
-  - 1차: `typeVariants`
-  - 2차: 각 요소의 `variants`
-- 수정 방법
-  - 먼저 `sand`, `soil`, `road`, `fence` 의 `variantIndex` 를 더 따뜻한 값으로 바꾼다.
-  - 그래도 부족하면 `placement_elements.json` 에서 해당 색 배리에이션의 hex 값을 더 따뜻한 쪽으로 조정한다.
-- 주의
-  - `water` 와 `grass` 까지 같이 과하게 따뜻하게 만들면 장면이 탁해질 수 있다.
-
-## 10. 변경 후 자체 검수 체크리스트
-
-- `typeVariants` 에 11개 요소가 모두 있는가
-- `variantIndex` 가 모두 0~2 범위인가
-- `groundPatches` 에는 바닥 요소만 들어 있는가
-- `props` 에는 `tree`, `rock`, `bush`, `mushroom` 만 들어 있는가
-- 물 주변이 층처럼 읽히는가
-- 길이 시선을 유도하는가
-- 우측 팬스가 주인공처럼 보이지 않는가
-- 큰 오브젝트가 화면 중앙을 과도하게 막지 않는가
-- 버섯이 작은 포인트 역할만 하고 있는가
-- 빈 공간이 남아 있는가
+- 개활지가 남아 있는가
+- 연못이 `water -> sand -> pebble` 층으로 읽히는가
+- 길이 갈색 선이 아니라 눌린 초지처럼 보이는가
+- 중앙이 너무 복잡하지 않은가
+- 좌우 무게가 완전 대칭이 아닌가
+- 펜스가 장면 주인공처럼 보이지 않는가
+- 버섯이 강조점 이상으로 많지 않은가
+- `placement_elements.json` 을 수정하지 않고 해결 가능한 요청인데도 건드리지 않았는가

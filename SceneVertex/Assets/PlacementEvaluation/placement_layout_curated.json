@@ -1,5 +1,6 @@
 {
   "sceneName": "AestheticNatural01",
+  "seed": 17032026,
   "typeVariants": [
     { "id": "grass", "variantIndex": 1 },
     { "id": "soil", "variantIndex": 0 },
@@ -13,111 +14,386 @@
     { "id": "mushroom", "variantIndex": 0 },
     { "id": "fence", "variantIndex": 2 }
   ],
-  "groundPatches": [
-    { "id": "grass", "x": 160.0, "y": 110.0, "radiusScale": 1.25, "aspectX": 1.35, "aspectY": 0.80, "rotationDeg": -8.0, "opacity": 0.55 },
-    { "id": "grass", "x": 352.0, "y": 80.0, "radiusScale": 1.10, "aspectX": 1.40, "aspectY": 0.85, "rotationDeg": 12.0, "opacity": 0.48 },
-    { "id": "grass", "x": 548.0, "y": 152.0, "radiusScale": 1.20, "aspectX": 1.25, "aspectY": 0.92, "rotationDeg": -15.0, "opacity": 0.50 },
-    { "id": "grass", "x": 752.0, "y": 108.0, "radiusScale": 1.15, "aspectX": 1.50, "aspectY": 0.82, "rotationDeg": 6.0, "opacity": 0.46 },
-    { "id": "grass", "x": 880.0, "y": 338.0, "radiusScale": 1.35, "aspectX": 1.42, "aspectY": 0.92, "rotationDeg": -18.0, "opacity": 0.52 },
-    { "id": "grass", "x": 620.0, "y": 370.0, "radiusScale": 1.28, "aspectX": 1.48, "aspectY": 0.88, "rotationDeg": 14.0, "opacity": 0.50 },
-
-    { "id": "soil", "x": 162.0, "y": 425.0, "radiusScale": 1.20, "aspectX": 1.35, "aspectY": 0.72, "rotationDeg": -28.0, "opacity": 0.58 },
-    { "id": "soil", "x": 374.0, "y": 322.0, "radiusScale": 1.05, "aspectX": 1.25, "aspectY": 0.68, "rotationDeg": -12.0, "opacity": 0.50 },
-    { "id": "soil", "x": 598.0, "y": 252.0, "radiusScale": 1.10, "aspectX": 1.30, "aspectY": 0.72, "rotationDeg": 8.0, "opacity": 0.48 },
-    { "id": "soil", "x": 870.0, "y": 147.0, "radiusScale": 0.95, "aspectX": 1.05, "aspectY": 0.90, "rotationDeg": 16.0, "opacity": 0.35 },
-    { "id": "soil", "x": 168.0, "y": 96.0, "radiusScale": 0.90, "aspectX": 1.08, "aspectY": 0.92, "rotationDeg": -10.0, "opacity": 0.34 },
-
-    { "id": "sand", "x": 222.0, "y": 224.0, "radiusScale": 1.25, "aspectX": 1.20, "aspectY": 0.90, "rotationDeg": 12.0, "opacity": 0.74 },
-    { "id": "sand", "x": 276.0, "y": 196.0, "radiusScale": 1.18, "aspectX": 1.45, "aspectY": 0.90, "rotationDeg": -18.0, "opacity": 0.72 },
-    { "id": "sand", "x": 315.0, "y": 236.0, "radiusScale": 1.12, "aspectX": 1.28, "aspectY": 0.92, "rotationDeg": 24.0, "opacity": 0.70 },
-    { "id": "sand", "x": 268.0, "y": 276.0, "radiusScale": 1.08, "aspectX": 1.35, "aspectY": 0.86, "rotationDeg": 6.0, "opacity": 0.68 },
-    { "id": "sand", "x": 338.0, "y": 205.0, "radiusScale": 0.96, "aspectX": 1.10, "aspectY": 0.82, "rotationDeg": -32.0, "opacity": 0.64 },
-    { "id": "sand", "x": 205.0, "y": 258.0, "radiusScale": 0.92, "aspectX": 1.10, "aspectY": 0.80, "rotationDeg": 28.0, "opacity": 0.60 },
-
-    { "id": "pebble", "x": 188.0, "y": 204.0, "radiusScale": 0.62, "aspectX": 1.00, "aspectY": 0.82, "rotationDeg": 8.0, "opacity": 0.66 },
-    { "id": "pebble", "x": 240.0, "y": 172.0, "radiusScale": 0.56, "aspectX": 1.05, "aspectY": 0.78, "rotationDeg": -22.0, "opacity": 0.60 },
-    { "id": "pebble", "x": 300.0, "y": 176.0, "radiusScale": 0.54, "aspectX": 1.00, "aspectY": 0.76, "rotationDeg": 18.0, "opacity": 0.58 },
-    { "id": "pebble", "x": 345.0, "y": 222.0, "radiusScale": 0.58, "aspectX": 1.00, "aspectY": 0.82, "rotationDeg": 32.0, "opacity": 0.62 },
-    { "id": "pebble", "x": 328.0, "y": 270.0, "radiusScale": 0.52, "aspectX": 0.98, "aspectY": 0.74, "rotationDeg": -14.0, "opacity": 0.56 },
-    { "id": "pebble", "x": 248.0, "y": 296.0, "radiusScale": 0.55, "aspectX": 1.08, "aspectY": 0.76, "rotationDeg": 12.0, "opacity": 0.58 },
-    { "id": "pebble", "x": 178.0, "y": 255.0, "radiusScale": 0.50, "aspectX": 0.94, "aspectY": 0.70, "rotationDeg": 26.0, "opacity": 0.54 },
-    { "id": "pebble", "x": 286.0, "y": 224.0, "radiusScale": 0.48, "aspectX": 1.15, "aspectY": 0.72, "rotationDeg": -8.0, "opacity": 0.52 },
-    { "id": "pebble", "x": 220.0, "y": 146.0, "radiusScale": 0.44, "aspectX": 1.00, "aspectY": 0.70, "rotationDeg": 4.0, "opacity": 0.48 },
-    { "id": "pebble", "x": 360.0, "y": 244.0, "radiusScale": 0.46, "aspectX": 1.00, "aspectY": 0.72, "rotationDeg": -28.0, "opacity": 0.54 },
-
-    { "id": "water", "x": 240.0, "y": 226.0, "radiusScale": 1.05, "aspectX": 1.10, "aspectY": 0.90, "rotationDeg": -12.0, "opacity": 0.84 },
-    { "id": "water", "x": 290.0, "y": 214.0, "radiusScale": 1.14, "aspectX": 1.18, "aspectY": 0.92, "rotationDeg": 18.0, "opacity": 0.88 },
-    { "id": "water", "x": 302.0, "y": 253.0, "radiusScale": 1.00, "aspectX": 1.06, "aspectY": 0.86, "rotationDeg": 30.0, "opacity": 0.82 },
-    { "id": "water", "x": 236.0, "y": 268.0, "radiusScale": 0.96, "aspectX": 1.02, "aspectY": 0.82, "rotationDeg": -18.0, "opacity": 0.80 },
-    { "id": "water", "x": 198.0, "y": 244.0, "radiusScale": 0.82, "aspectX": 0.98, "aspectY": 0.78, "rotationDeg": 16.0, "opacity": 0.76 }
+  "meadow": {
+    "accentGrassCount": 120,
+    "openCenterX": 566.0,
+    "openCenterY": 274.0,
+    "openCenterRadiusX": 246.0,
+    "openCenterRadiusY": 142.0,
+    "windAngleDeg": 6.0
+  },
+  "ponds": [
+    {
+      "center": { "x": 232.0, "y": 256.0 },
+      "radiusX": 88.0,
+      "radiusY": 64.0,
+      "rotationDeg": -10.0,
+      "sandWidth": 18.0,
+      "pebbleWidth": 10.0,
+      "irregularity": 0.24,
+      "lobes": [
+        {
+          "angleDeg": -36.0,
+          "distance": 36.0,
+          "radiusXScale": 0.76,
+          "radiusYScale": 0.72,
+          "rotationDeg": -18.0
+        },
+        {
+          "angleDeg": 18.0,
+          "distance": 54.0,
+          "radiusXScale": 0.66,
+          "radiusYScale": 0.58,
+          "rotationDeg": 14.0
+        },
+        {
+          "angleDeg": 68.0,
+          "distance": 42.0,
+          "radiusXScale": 0.58,
+          "radiusYScale": 0.54,
+          "rotationDeg": 20.0
+        }
+      ]
+    }
   ],
-  "roadSegments": [
-    { "x": 88.0, "y": 438.0, "rotationDeg": -24.0, "lengthScale": 1.02, "thicknessScale": 1.02, "opacity": 0.98 },
-    { "x": 142.0, "y": 408.0, "rotationDeg": -31.0, "lengthScale": 1.04, "thicknessScale": 1.04, "opacity": 0.98 },
-    { "x": 210.0, "y": 368.0, "rotationDeg": -25.0, "lengthScale": 1.06, "thicknessScale": 1.03, "opacity": 0.99 },
-    { "x": 284.0, "y": 334.0, "rotationDeg": -18.0, "lengthScale": 1.04, "thicknessScale": 1.02, "opacity": 0.99 },
-    { "x": 364.0, "y": 308.0, "rotationDeg": -10.0, "lengthScale": 1.02, "thicknessScale": 1.00, "opacity": 0.99 },
-    { "x": 448.0, "y": 288.0, "rotationDeg": -6.0, "lengthScale": 1.00, "thicknessScale": 1.00, "opacity": 0.99 },
-    { "x": 540.0, "y": 270.0, "rotationDeg": -3.0, "lengthScale": 1.04, "thicknessScale": 1.02, "opacity": 1.00 },
-    { "x": 630.0, "y": 258.0, "rotationDeg": 2.0, "lengthScale": 1.02, "thicknessScale": 1.00, "opacity": 0.99 },
-    { "x": 716.0, "y": 254.0, "rotationDeg": 4.0, "lengthScale": 1.00, "thicknessScale": 0.99, "opacity": 0.99 },
-    { "x": 800.0, "y": 250.0, "rotationDeg": 1.0, "lengthScale": 0.98, "thicknessScale": 0.98, "opacity": 0.98 },
-    { "x": 876.0, "y": 242.0, "rotationDeg": -4.0, "lengthScale": 0.94, "thicknessScale": 0.96, "opacity": 0.97 },
-    { "x": 944.0, "y": 230.0, "rotationDeg": -8.0, "lengthScale": 0.90, "thicknessScale": 0.94, "opacity": 0.96 }
+  "trails": [
+    {
+      "id": "north_pass",
+      "points": [
+        { "x": 0.0, "y": 190.0 },
+        { "x": 84.0, "y": 186.0 },
+        { "x": 154.0, "y": 188.0 },
+        { "x": 236.0, "y": 196.0 },
+        { "x": 352.0, "y": 206.0 },
+        { "x": 494.0, "y": 214.0 },
+        { "x": 670.0, "y": 218.0 },
+        { "x": 860.0, "y": 214.0 },
+        { "x": 1024.0, "y": 206.0 }
+      ],
+      "traffic": 0.62,
+      "width": 1.02,
+      "soilExposure": 0.16,
+      "braid": 0.18,
+      "wander": 0.12
+    },
+    {
+      "id": "middle_pass",
+      "points": [
+        { "x": 0.0, "y": 236.0 },
+        { "x": 86.0, "y": 232.0 },
+        { "x": 150.0, "y": 228.0 },
+        { "x": 222.0, "y": 224.0 },
+        { "x": 324.0, "y": 236.0 },
+        { "x": 470.0, "y": 250.0 },
+        { "x": 646.0, "y": 258.0 },
+        { "x": 842.0, "y": 262.0 },
+        { "x": 1024.0, "y": 268.0 }
+      ],
+      "traffic": 0.88,
+      "width": 1.1,
+      "soilExposure": 0.28,
+      "braid": 0.22,
+      "wander": 0.16
+    },
+    {
+      "id": "south_pass",
+      "points": [
+        { "x": 0.0, "y": 322.0 },
+        { "x": 90.0, "y": 318.0 },
+        { "x": 166.0, "y": 308.0 },
+        { "x": 240.0, "y": 292.0 },
+        { "x": 336.0, "y": 288.0 },
+        { "x": 472.0, "y": 300.0 },
+        { "x": 640.0, "y": 318.0 },
+        { "x": 832.0, "y": 334.0 },
+        { "x": 1024.0, "y": 350.0 }
+      ],
+      "traffic": 0.74,
+      "width": 1.04,
+      "soilExposure": 0.24,
+      "braid": 0.18,
+      "wander": 0.14
+    },
+    {
+      "id": "pond_north_approach",
+      "points": [
+        { "x": 110.0, "y": 228.0 },
+        { "x": 148.0, "y": 214.0 },
+        { "x": 192.0, "y": 206.0 },
+        { "x": 238.0, "y": 210.0 },
+        { "x": 286.0, "y": 224.0 },
+        { "x": 336.0, "y": 242.0 }
+      ],
+      "traffic": 0.42,
+      "width": 0.82,
+      "soilExposure": 0.22,
+      "braid": 0.06,
+      "wander": 0.12
+    },
+    {
+      "id": "pond_south_approach",
+      "points": [
+        { "x": 108.0, "y": 296.0 },
+        { "x": 156.0, "y": 286.0 },
+        { "x": 206.0, "y": 282.0 },
+        { "x": 256.0, "y": 286.0 },
+        { "x": 308.0, "y": 302.0 },
+        { "x": 360.0, "y": 326.0 }
+      ],
+      "traffic": 0.38,
+      "width": 0.8,
+      "soilExposure": 0.2,
+      "braid": 0.06,
+      "wander": 0.12
+    },
+    {
+      "id": "east_connector",
+      "points": [
+        { "x": 648.0, "y": 258.0 },
+        { "x": 724.0, "y": 246.0 },
+        { "x": 804.0, "y": 238.0 },
+        { "x": 874.0, "y": 226.0 },
+        { "x": 944.0, "y": 202.0 }
+      ],
+      "traffic": 0.36,
+      "width": 0.82,
+      "soilExposure": 0.16,
+      "braid": 0.04,
+      "wander": 0.1
+    },
+    {
+      "id": "grazing_cut",
+      "points": [
+        { "x": 592.0, "y": 302.0 },
+        { "x": 690.0, "y": 318.0 },
+        { "x": 786.0, "y": 344.0 },
+        { "x": 888.0, "y": 388.0 }
+      ],
+      "traffic": 0.34,
+      "width": 0.8,
+      "soilExposure": 0.14,
+      "braid": 0.08,
+      "wander": 0.1
+    }
   ],
-  "props": [
-    { "id": "tree", "x": 112.0, "y": 120.0, "radiusScale": 1.08, "rotationDeg": 16.0, "opacity": 1.00 },
-    { "id": "tree", "x": 156.0, "y": 80.0, "radiusScale": 0.96, "rotationDeg": -12.0, "opacity": 1.00 },
-    { "id": "tree", "x": 214.0, "y": 106.0, "radiusScale": 1.02, "rotationDeg": 22.0, "opacity": 1.00 },
-    { "id": "tree", "x": 828.0, "y": 92.0, "radiusScale": 1.04, "rotationDeg": -8.0, "opacity": 1.00 },
-    { "id": "tree", "x": 906.0, "y": 126.0, "radiusScale": 1.10, "rotationDeg": 14.0, "opacity": 1.00 },
-    { "id": "tree", "x": 960.0, "y": 178.0, "radiusScale": 0.94, "rotationDeg": 28.0, "opacity": 1.00 },
-    { "id": "tree", "x": 882.0, "y": 252.0, "radiusScale": 1.06, "rotationDeg": 10.0, "opacity": 1.00 },
-    { "id": "tree", "x": 840.0, "y": 330.0, "radiusScale": 1.02, "rotationDeg": -18.0, "opacity": 1.00 },
-    { "id": "tree", "x": 932.0, "y": 344.0, "radiusScale": 0.98, "rotationDeg": 26.0, "opacity": 1.00 },
-
-    { "id": "rock", "x": 158.0, "y": 200.0, "radiusScale": 1.10, "rotationDeg": -20.0, "opacity": 0.98 },
-    { "id": "rock", "x": 356.0, "y": 186.0, "radiusScale": 1.04, "rotationDeg": 24.0, "opacity": 0.98 },
-    { "id": "rock", "x": 350.0, "y": 286.0, "radiusScale": 1.02, "rotationDeg": -10.0, "opacity": 0.98 },
-    { "id": "rock", "x": 188.0, "y": 318.0, "radiusScale": 0.96, "rotationDeg": 16.0, "opacity": 0.96 },
-    { "id": "rock", "x": 470.0, "y": 327.0, "radiusScale": 0.92, "rotationDeg": 18.0, "opacity": 0.96 },
-    { "id": "rock", "x": 694.0, "y": 214.0, "radiusScale": 0.88, "rotationDeg": -12.0, "opacity": 0.95 },
-    { "id": "rock", "x": 818.0, "y": 205.0, "radiusScale": 0.90, "rotationDeg": 12.0, "opacity": 0.95 },
-
-    { "id": "bush", "x": 126.0, "y": 158.0, "radiusScale": 0.98, "rotationDeg": 6.0, "opacity": 0.95 },
-    { "id": "bush", "x": 184.0, "y": 146.0, "radiusScale": 0.94, "rotationDeg": -16.0, "opacity": 0.95 },
-    { "id": "bush", "x": 244.0, "y": 142.0, "radiusScale": 0.92, "rotationDeg": 20.0, "opacity": 0.94 },
-    { "id": "bush", "x": 796.0, "y": 134.0, "radiusScale": 0.96, "rotationDeg": -8.0, "opacity": 0.94 },
-    { "id": "bush", "x": 878.0, "y": 188.0, "radiusScale": 1.02, "rotationDeg": 14.0, "opacity": 0.95 },
-    { "id": "bush", "x": 934.0, "y": 220.0, "radiusScale": 0.90, "rotationDeg": 10.0, "opacity": 0.94 },
-    { "id": "bush", "x": 806.0, "y": 360.0, "radiusScale": 0.98, "rotationDeg": -18.0, "opacity": 0.95 },
-    { "id": "bush", "x": 890.0, "y": 372.0, "radiusScale": 1.04, "rotationDeg": 12.0, "opacity": 0.96 },
-    { "id": "bush", "x": 494.0, "y": 308.0, "radiusScale": 0.88, "rotationDeg": -8.0, "opacity": 0.92 },
-    { "id": "bush", "x": 642.0, "y": 284.0, "radiusScale": 0.84, "rotationDeg": 9.0, "opacity": 0.92 },
-
-    { "id": "mushroom", "x": 104.0, "y": 164.0, "radiusScale": 1.04, "rotationDeg": 8.0, "opacity": 0.96 },
-    { "id": "mushroom", "x": 132.0, "y": 180.0, "radiusScale": 0.96, "rotationDeg": -14.0, "opacity": 0.96 },
-    { "id": "mushroom", "x": 170.0, "y": 156.0, "radiusScale": 0.92, "rotationDeg": 12.0, "opacity": 0.94 },
-    { "id": "mushroom", "x": 228.0, "y": 154.0, "radiusScale": 0.90, "rotationDeg": -6.0, "opacity": 0.94 },
-    { "id": "mushroom", "x": 814.0, "y": 150.0, "radiusScale": 0.92, "rotationDeg": 18.0, "opacity": 0.94 },
-    { "id": "mushroom", "x": 840.0, "y": 164.0, "radiusScale": 0.96, "rotationDeg": -10.0, "opacity": 0.95 },
-    { "id": "mushroom", "x": 900.0, "y": 210.0, "radiusScale": 1.02, "rotationDeg": 6.0, "opacity": 0.96 },
-    { "id": "mushroom", "x": 922.0, "y": 228.0, "radiusScale": 0.90, "rotationDeg": -18.0, "opacity": 0.94 },
-    { "id": "mushroom", "x": 824.0, "y": 382.0, "radiusScale": 0.98, "rotationDeg": 12.0, "opacity": 0.95 },
-    { "id": "mushroom", "x": 854.0, "y": 392.0, "radiusScale": 0.94, "rotationDeg": -8.0, "opacity": 0.95 },
-    { "id": "mushroom", "x": 908.0, "y": 392.0, "radiusScale": 1.00, "rotationDeg": 16.0, "opacity": 0.96 },
-    { "id": "mushroom", "x": 944.0, "y": 366.0, "radiusScale": 0.92, "rotationDeg": -10.0, "opacity": 0.94 }
+  "groves": [
+    {
+      "id": "upper_left_grove",
+      "center": { "x": 106.0, "y": 118.0 },
+      "radiusX": 82.0,
+      "radiusY": 54.0,
+      "rotationDeg": -20.0,
+      "treeCount": 22,
+      "bushCount": 26,
+      "mushroomCount": 18,
+      "innerClear": 0.1,
+      "treeEdgeBias": 0.62
+    },
+    {
+      "id": "lower_left_grove",
+      "center": { "x": 116.0, "y": 404.0 },
+      "radiusX": 90.0,
+      "radiusY": 64.0,
+      "rotationDeg": 14.0,
+      "treeCount": 20,
+      "bushCount": 24,
+      "mushroomCount": 18,
+      "innerClear": 0.08,
+      "treeEdgeBias": 0.58
+    },
+    {
+      "id": "upper_right_grove",
+      "center": { "x": 862.0, "y": 124.0 },
+      "radiusX": 96.0,
+      "radiusY": 60.0,
+      "rotationDeg": 18.0,
+      "treeCount": 24,
+      "bushCount": 30,
+      "mushroomCount": 22,
+      "innerClear": 0.08,
+      "treeEdgeBias": 0.6
+    },
+    {
+      "id": "lower_right_grove",
+      "center": { "x": 870.0, "y": 398.0 },
+      "radiusX": 102.0,
+      "radiusY": 68.0,
+      "rotationDeg": -12.0,
+      "treeCount": 22,
+      "bushCount": 28,
+      "mushroomCount": 20,
+      "innerClear": 0.08,
+      "treeEdgeBias": 0.58
+    },
+    {
+      "id": "upper_mid_grove",
+      "center": { "x": 642.0, "y": 100.0 },
+      "radiusX": 48.0,
+      "radiusY": 26.0,
+      "rotationDeg": 8.0,
+      "treeCount": 6,
+      "bushCount": 10,
+      "mushroomCount": 8,
+      "innerClear": 0.04,
+      "treeEdgeBias": 0.52
+    },
+    {
+      "id": "lower_mid_grove",
+      "center": { "x": 636.0, "y": 420.0 },
+      "radiusX": 46.0,
+      "radiusY": 30.0,
+      "rotationDeg": -14.0,
+      "treeCount": 10,
+      "bushCount": 14,
+      "mushroomCount": 10,
+      "innerClear": 0.08,
+      "treeEdgeBias": 0.5
+    }
   ],
-  "fenceSegments": [
-    { "x": 842.0, "y": 74.0, "rotationDeg": 16.0, "lengthScale": 0.96, "opacity": 1.00 },
-    { "x": 874.0, "y": 86.0, "rotationDeg": 22.0, "lengthScale": 1.00, "opacity": 1.00 },
-    { "x": 906.0, "y": 104.0, "rotationDeg": 30.0, "lengthScale": 1.02, "opacity": 1.00 },
-    { "x": 938.0, "y": 132.0, "rotationDeg": 44.0, "lengthScale": 1.05, "opacity": 1.00 },
-    { "x": 962.0, "y": 170.0, "rotationDeg": 62.0, "lengthScale": 1.04, "opacity": 1.00 },
-    { "x": 972.0, "y": 214.0, "rotationDeg": 86.0, "lengthScale": 1.00, "opacity": 1.00 },
-    { "x": 968.0, "y": 258.0, "rotationDeg": 92.0, "lengthScale": 1.00, "opacity": 1.00 },
-    { "x": 954.0, "y": 302.0, "rotationDeg": 106.0, "lengthScale": 0.98, "opacity": 1.00 },
-    { "x": 934.0, "y": 340.0, "rotationDeg": 120.0, "lengthScale": 0.96, "opacity": 1.00 },
-    { "x": 902.0, "y": 374.0, "rotationDeg": 132.0, "lengthScale": 0.94, "opacity": 1.00 }
+  "scatterZones": [
+    {
+      "id": "pond_rocks",
+      "kind": "rock",
+      "center": { "x": 238.0, "y": 254.0 },
+      "radiusX": 128.0,
+      "radiusY": 96.0,
+      "rotationDeg": -10.0,
+      "count": 28,
+      "innerRadius": 0.74,
+      "scaleMin": 0.86,
+      "scaleMax": 1.16,
+      "opacityMin": 0.58,
+      "opacityMax": 0.84
+    },
+    {
+      "id": "east_fork_rocks",
+      "kind": "rock",
+      "center": { "x": 502.0, "y": 250.0 },
+      "radiusX": 76.0,
+      "radiusY": 28.0,
+      "rotationDeg": 6.0,
+      "count": 12,
+      "innerRadius": 0.18,
+      "scaleMin": 0.84,
+      "scaleMax": 1.1,
+      "opacityMin": 0.58,
+      "opacityMax": 0.8
+    },
+    {
+      "id": "south_track_rocks",
+      "kind": "rock",
+      "center": { "x": 742.0, "y": 332.0 },
+      "radiusX": 92.0,
+      "radiusY": 26.0,
+      "rotationDeg": 12.0,
+      "count": 12,
+      "innerRadius": 0.16,
+      "scaleMin": 0.82,
+      "scaleMax": 1.08,
+      "opacityMin": 0.56,
+      "opacityMax": 0.78
+    },
+    {
+      "id": "pond_shoulder_bush",
+      "kind": "bush",
+      "center": { "x": 332.0, "y": 228.0 },
+      "radiusX": 56.0,
+      "radiusY": 24.0,
+      "rotationDeg": 10.0,
+      "count": 12,
+      "innerRadius": 0.14,
+      "scaleMin": 0.78,
+      "scaleMax": 1.04,
+      "opacityMin": 0.56,
+      "opacityMax": 0.76
+    },
+    {
+      "id": "pond_lower_bush",
+      "kind": "bush",
+      "center": { "x": 330.0, "y": 304.0 },
+      "radiusX": 56.0,
+      "radiusY": 24.0,
+      "rotationDeg": 16.0,
+      "count": 10,
+      "innerRadius": 0.16,
+      "scaleMin": 0.78,
+      "scaleMax": 1.04,
+      "opacityMin": 0.56,
+      "opacityMax": 0.76
+    },
+    {
+      "id": "mid_shade_mushrooms",
+      "kind": "mushroom",
+      "center": { "x": 642.0, "y": 420.0 },
+      "radiusX": 28.0,
+      "radiusY": 18.0,
+      "rotationDeg": -8.0,
+      "count": 12,
+      "innerRadius": 0.08,
+      "scaleMin": 0.84,
+      "scaleMax": 1.18,
+      "opacityMin": 0.72,
+      "opacityMax": 0.92
+    }
+  ],
+  "fenceLines": [
+    {
+      "points": [
+        { "x": 958.0, "y": 90.0 },
+        { "x": 950.0, "y": 160.0 },
+        { "x": 950.0, "y": 236.0 },
+        { "x": 958.0, "y": 318.0 },
+        { "x": 980.0, "y": 430.0 }
+      ],
+      "density": 0.92,
+      "brokenness": 0.12,
+      "lengthScale": 0.9,
+      "opacity": 0.78
+    },
+    {
+      "points": [
+        { "x": 18.0, "y": 430.0 },
+        { "x": 72.0, "y": 414.0 },
+        { "x": 128.0, "y": 400.0 },
+        { "x": 174.0, "y": 388.0 }
+      ],
+      "density": 0.86,
+      "brokenness": 0.24,
+      "lengthScale": 0.88,
+      "opacity": 0.74
+    },
+    {
+      "points": [
+        { "x": 900.0, "y": 420.0 },
+        { "x": 942.0, "y": 444.0 },
+        { "x": 986.0, "y": 472.0 }
+      ],
+      "density": 0.88,
+      "brokenness": 0.2,
+      "lengthScale": 0.86,
+      "opacity": 0.74
+    },
+    {
+      "points": [
+        { "x": 884.0, "y": 126.0 },
+        { "x": 926.0, "y": 104.0 },
+        { "x": 972.0, "y": 82.0 }
+      ],
+      "density": 0.9,
+      "brokenness": 0.18,
+      "lengthScale": 0.88,
+      "opacity": 0.74
+    },
+    {
+      "points": [
+        { "x": 26.0, "y": 90.0 },
+        { "x": 84.0, "y": 106.0 },
+        { "x": 148.0, "y": 126.0 }
+      ],
+      "density": 0.84,
+      "brokenness": 0.2,
+      "lengthScale": 0.84,
+      "opacity": 0.72
+    }
   ]
 }
