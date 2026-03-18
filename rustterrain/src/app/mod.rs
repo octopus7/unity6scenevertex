@@ -10,7 +10,12 @@ use std::{mem::size_of, path::PathBuf};
 
 use eframe::egui::{Pos2, TextureHandle};
 
-use crate::{terrain::generate_heightmap, tool::ToolKind, utils::next_seed};
+use crate::{
+    constants::{MAX_BRUSH_RADIUS, MIN_BRUSH_RADIUS},
+    terrain::generate_heightmap,
+    tool::ToolKind,
+    utils::next_seed,
+};
 
 use self::{
     history::{DocumentState, HistoryStack},
@@ -136,6 +141,10 @@ impl TerrainApp {
     fn clear_replay_records(&mut self) {
         self.replay_records.clear();
         self.replay_sequence = 0;
+    }
+
+    fn adjust_brush_radius(&mut self, delta: f32) {
+        self.brush_radius = (self.brush_radius + delta).clamp(MIN_BRUSH_RADIUS, MAX_BRUSH_RADIUS);
     }
 
     fn tile_memory_bytes(&self) -> usize {

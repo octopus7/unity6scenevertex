@@ -14,6 +14,8 @@ use crate::{
 use super::TerrainApp;
 
 impl TerrainApp {
+    const BRUSH_SHORTCUT_STEP: f32 = 4.0;
+
     fn controls_ui(&mut self, ctx: &Context) {
         SidePanel::left("controls_panel")
             .resizable(false)
@@ -127,10 +129,12 @@ impl TerrainApp {
     }
 
     fn handle_shortcuts(&mut self, ctx: &Context) {
-        let (undo_pressed, redo_pressed, pointer_down) = ctx.input(|input| {
+        let (undo_pressed, redo_pressed, decrease_brush, increase_brush, pointer_down) = ctx.input(|input| {
             (
                 input.modifiers.command && input.key_pressed(Key::Z),
                 input.modifiers.command && input.key_pressed(Key::Y),
+                input.key_pressed(Key::OpenBracket),
+                input.key_pressed(Key::CloseBracket),
                 input.pointer.any_down(),
             )
         });
@@ -143,6 +147,14 @@ impl TerrainApp {
             self.undo();
         } else if redo_pressed {
             self.redo();
+        }
+
+        if decrease_brush {
+            self.adjust_brush_radius(-Self::BRUSH_SHORTCUT_STEP);
+        }
+
+        if increase_brush {
+            self.adjust_brush_radius(Self::BRUSH_SHORTCUT_STEP);
         }
     }
 }
@@ -176,7 +188,7 @@ impl eframe::App for TerrainApp {
                 ui.separator();
                 ui.label(self.active_tool.description());
                 ui.separator();
-                ui.label("Wheel: brush size");
+                ui.label("Wheel / [ ]: brush size");
                 ui.separator();
                 ui.label(format!("Brush {:.0}px", self.brush_radius));
                 ui.separator();

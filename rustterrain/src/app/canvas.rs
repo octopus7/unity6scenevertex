@@ -3,7 +3,7 @@ use eframe::egui::{
 };
 
 use crate::{
-    constants::{BITMAP_SIZE, MAX_BRUSH_RADIUS, MIN_BRUSH_RADIUS},
+    constants::BITMAP_SIZE,
     tool::ToolKind,
     utils::{bitmap_to_screen, screen_to_bitmap},
 };
@@ -50,8 +50,7 @@ impl TerrainApp {
         if response.hovered() {
             let scroll_delta = ctx.input(|input| input.raw_scroll_delta.y);
             if scroll_delta.abs() > f32::EPSILON {
-                self.brush_radius = (self.brush_radius + scroll_delta * 0.05)
-                    .clamp(MIN_BRUSH_RADIUS, MAX_BRUSH_RADIUS);
+                self.adjust_brush_radius(scroll_delta * 0.05);
             }
         }
 
